@@ -128,19 +128,19 @@ h3{font-size:15px;font-weight:600;margin-bottom:.6rem}
       <div style="font-size:13px;color:var(--gray-400);margin-top:3px">โรงเรียนบ้านสวนวิทยาคม</div>
     </div>
     <div class="role-tabs">
-      <button class="role-tab active" id="roleTeacher" onclick="pickRole('teacher')"><i class="ti ti-school" style="font-size:15px"></i> ครู</button>
-      <button class="role-tab" id="roleStudent" onclick="pickRole('student')"><i class="ti ti-user" style="font-size:15px"></i> นักเรียน</button>
+      <button class="role-tab active" id="roleTeacher"><i class="ti ti-school" style="font-size:15px"></i> ครู</button>
+      <button class="role-tab" id="roleStudent"><i class="ti ti-user" style="font-size:15px"></i> นักเรียน</button>
     </div>
     <div id="teacherArea">
       <div class="form-group"><label>ชื่อผู้ใช้</label><input id="loginUser" type="text" placeholder="username"></div>
-      <div class="form-group"><label>รหัสผ่าน</label><input id="loginPass" type="password" placeholder="password" onkeypress="if(event.key==='Enter')doLogin()"></div>
-      <button class="btn btn-blue" style="width:100%" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+      <div class="form-group"><label>รหัสผ่าน</label><input id="loginPass" type="password" placeholder="password"></div>
+      <button class="btn btn-blue" style="width:100%" id="loginBtn">เข้าสู่ระบบ</button>
     </div>
     <div id="studentArea" style="display:none">
       <div style="background:var(--yellow-100);border:1.5px solid var(--yellow-200);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;color:var(--yellow-800);margin-bottom:1rem"><i class="ti ti-info-circle"></i> กรอกชื่อ-นามสกุลให้ตรงกับทะเบียน</div>
       <div class="form-group"><label>ห้องเรียน</label><select id="stuClass"><option value="">-- เลือกห้อง --</option></select></div>
-      <div class="form-group"><label>ชื่อ-นามสกุล</label><input id="stuName" type="text" placeholder="เช่น กนกพร รักเรียน" onkeypress="if(event.key==='Enter')doStudentLogin()"></div>
-      <button class="btn btn-blue" style="width:100%" id="stuBtn" onclick="doStudentLogin()">เข้าสู่ระบบ</button>
+      <div class="form-group"><label>ชื่อ-นามสกุล</label><input id="stuName" type="text" placeholder="เช่น กนกพร รักเรียน"></div>
+      <button class="btn btn-blue" style="width:100%" id="stuBtn">เข้าสู่ระบบ</button>
     </div>
   </div>
 </div>
@@ -187,8 +187,8 @@ const PRESET_MINUS = [
 
 // ── USERS (hardcoded — แก้ตรงนี้เพื่อเพิ่มครู) ──
 const USERS = {
-  teacher1 : { password:'1234',      role:'teacher', displayName:'ครูศุภลักษณ์' },
-  teacher2 : { password:'1234',      role:'teacher', displayName:'ครูวัชรพล' },
+  teacher1 : { password:'1234',      role:'teacher', displayName:'ครูสุภลักษณ์' },
+  teacher2 : { password:'1234',      role:'teacher', displayName:'ครูสมศรี' },
   admin    : { password:'admin2569', role:'admin',   displayName:'ผู้ดูแลระบบ' },
 };
 
@@ -761,6 +761,15 @@ window.loadStudentHistory = async sid => {
 // ── INIT ──
 setupInitialData();
 loadStudents();
+
+// ── EVENT LISTENERS (แทน onclick ใน HTML) ──
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPass').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('stuBtn').addEventListener('click', doStudentLogin);
+document.getElementById('stuName').addEventListener('keypress', e => { if(e.key==='Enter') doStudentLogin(); });
+document.getElementById('roleTeacher').addEventListener('click', () => pickRole('teacher'));
+document.getElementById('roleStudent').addEventListener('click', () => pickRole('student'));
+
 </script>
 </body>
 </html>
