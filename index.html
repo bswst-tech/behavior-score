@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --blue-50:#f0f8fc;--blue-100:#cbe8f2;--blue-200:#9dd1e6;
@@ -216,7 +217,7 @@ var _stype = 1, _imgB64 = '', _imgMime = '', _imgName = '';
 
 // ── HELPERS ──
 function $(id){ return document.getElementById(id); }
-function makeId(no, cls){ return String(no).padStart(3,'0') + '_' + cls.replace(/[\/\s]/g,''); }
+function makeId(no, cls){ return String(no).padStart(3,'0') + '_' + cls.replace(/[\/\s\.]/g,''); }
 function scoreCls(s){ return s>=80?'score-good':s>=60?'score-mid':'score-low'; }
 function scoreBadge(s){
   var c = s>=80?'badge-green':s>=60?'badge-yellow':'badge-red';
@@ -425,7 +426,10 @@ function renderClassGroups(){
 
     var h = '<div class="container">';
     h += '<div class="section-header"><h2 style="margin:0">นักเรียนแยกตามชั้น</h2>';
-    h += '<button class="btn btn-blue" onclick="openAddStudentModal()"><i class="ti ti-user-plus"></i> เพิ่มนักเรียน</button></div>';
+    h += '<div style="display:flex;gap:.5rem">';
+    h += '<button class="btn btn-yellow" onclick="openImportExcel()"><i class="ti ti-file-spreadsheet"></i> นำเข้า Excel</button>';
+    h += '<button class="btn btn-blue" onclick="openAddStudentModal()"><i class="ti ti-user-plus"></i> เพิ่มนักเรียน</button>';
+    h += '</div></div>';
     h += '<div class="class-grid">';
     classes.forEach(function(cls){
       var count = classMap[cls].length;
@@ -875,6 +879,95 @@ function loadStudentHistory(sid){
     });
     h += '</div></div>';
     showPage(h);
+  });
+}
+
+// ── IMPORT EXCEL ──
+function openImportExcel(){
+  Swal.fire({
+    title:'นำเข้านักเรียนจาก Excel',
+    html:'<div style="text-align:left">'
+      +'<div style="background:var(--yellow-100);border:1.5px solid var(--yellow-200);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;color:var(--yellow-800);margin-bottom:1rem">'
+      +'<i class="ti ti-alert-triangle"></i> <strong>คำเตือน:</strong> ระบบจะลบข้อมูลนักเรียนเดิมทั้งหมดแล้วนำเข้าใหม่<br>'
+      +'ประวัติคะแนนจะยังคงอยู่ครับ</div>'
+      +'<div style="background:var(--blue-50);border:1.5px solid var(--blue-100);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;margin-bottom:1rem">'
+      +'<strong>รูปแบบไฟล์ Excel ที่รองรับ:</strong><br>'
+      +'คอลัมน์ A = เลขที่<br>คอลัมน์ B = ชื่อ-นามสกุล<br>คอลัมน์ C = ห้อง<br>'
+      +'(แถวแรกเป็นหัวตาราง แถวที่ 2 เป็นต้นไปเป็นข้อมูล)</div>'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:6px">เลือกไฟล์ Excel (.xlsx)</label>'
+      +'<input type="file" id="excelFile" accept=".xlsx,.xls" style="font-family:Sarabun;width:100%">'
+      +'<div id="excelPreview" style="margin-top:1rem"></div>'
+      +'</div>',
+    confirmButtonText:'<i class="ti ti-upload"></i> นำเข้าข้อมูล',
+    confirmButtonColor:'#2980b9',
+    showCancelButton:true,
+    cancelButtonText:'ยกเลิก',
+    didOpen:function(){
+      document.getElementById('excelFile').addEventListener('change', function(e){
+        var file = e.target.files[0]; if(!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          try {
+            var wb   = XLSX.read(ev.target.result, {type:'binary'});
+            var ws   = wb.Sheets[wb.SheetNames[0]];
+            var data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+            var rows = data.slice(1).filter(function(r){ return r[0]&&r[1]&&r[2]; });
+            var prev = '<div style="font-size:13px;font-weight:500;margin-bottom:.5rem">พบข้อมูล <span style="color:var(--blue-600)">'+rows.length+' คน</span> ตัวอย่าง:</div>';
+            prev += '<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">';
+            prev += '<thead><tr><th style="background:var(--blue-100);padding:5px 8px;text-align:left">เลขที่</th><th style="background:var(--blue-100);padding:5px 8px;text-align:left">ชื่อ-นามสกุล</th><th style="background:var(--blue-100);padding:5px 8px;text-align:left">ห้อง</th></tr></thead><tbody>';
+            rows.slice(0,5).forEach(function(r){
+              prev += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--blue-50)">'+r[0]+'</td><td style="padding:4px 8px;border-bottom:1px solid var(--blue-50)">'+r[1]+'</td><td style="padding:4px 8px;border-bottom:1px solid var(--blue-50)">'+r[2]+'</td></tr>';
+            });
+            if(rows.length>5) prev += '<tr><td colspan="3" style="padding:4px 8px;color:var(--gray-400);text-align:center">... และอีก '+(rows.length-5)+' คน</td></tr>';
+            prev += '</tbody></table></div>';
+            document.getElementById('excelPreview').innerHTML = prev;
+            document.getElementById('excelFile')._parsedRows = rows;
+          } catch(err){
+            document.getElementById('excelPreview').innerHTML = '<div style="color:var(--red-600);font-size:13px">อ่านไฟล์ไม่ได้: '+err.message+'</div>';
+          }
+        };
+        reader.readAsBinaryString(file);
+      });
+    },
+    preConfirm:function(){
+      var el   = document.getElementById('excelFile');
+      var rows = el._parsedRows;
+      if(!rows||!rows.length){ Swal.showValidationMessage('กรุณาเลือกไฟล์ Excel ก่อน'); return false; }
+      return rows;
+    }
+  }).then(function(r){
+    if(!r.isConfirmed) return;
+    importExcelData(r.value);
+  });
+}
+
+function importExcelData(rows){
+  Swal.fire({
+    title:'กำลังนำเข้าข้อมูล...',
+    text:'กรุณารอสักครู่',
+    allowOutsideClick:false,
+    didOpen:function(){ Swal.showLoading(); }
+  });
+
+  // ลบข้อมูลเดิมทั้งหมดก่อน
+  db.ref('students').remove().then(function(){
+    var updates = {};
+    rows.forEach(function(r){
+      var no   = String(r[0]).trim();
+      var name = String(r[1]).trim();
+      var cls  = String(r[2]).trim();
+      if(!no||!name||!cls) return;
+      var id = makeId(no, cls);
+      updates['students/'+id] = {no:Number(no), name:name, class:cls, score:100};
+    });
+    return db.ref().update(updates);
+  }).then(function(){
+    Swal.close();
+    toast('success','นำเข้าสำเร็จ','นักเรียน '+rows.length+' คน');
+    loadStudents(function(){ renderClassGroups(); });
+  }).catch(function(e){
+    Swal.close();
+    toast('error','เกิดข้อผิดพลาด',e.message);
   });
 }
 
