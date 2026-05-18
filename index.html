@@ -242,6 +242,9 @@ function scoreBadge(s){
   var c = s>=80?'badge-green':s>=60?'badge-yellow':'badge-red';
   return '<span class="badge '+c+'">'+s+'</span>';
 }
+function volunteerBadge(v){
+  return '<span class="badge badge-blue">⭐ '+v+'</span>';
+}
 function statusBadge(s){
   if(s>=80) return '<span class="badge badge-green">ดี</span>';
   if(s>=60) return '<span class="badge badge-yellow">ปานกลาง</span>';
@@ -263,7 +266,11 @@ function loadStudents(callback){
     if(snap.exists()){
       snap.forEach(function(child){
         var d = child.val();
-        students.push({id:child.key, no:d.no, name:d.name, class:d.class, score:d.score||100});
+        students.push({
+          id:child.key, no:d.no, name:d.name, class:d.class,
+          score:d.score !== undefined ? d.score : 100,      // คะแนนพฤติกรรม (0-100)
+          volunteer:d.volunteer !== undefined ? d.volunteer : 0  // คะแนนจิตอาสา (สะสม)
+        });
       });
     }
     students.sort(function(a,b){ return Number(a.no)-Number(b.no); });
@@ -471,10 +478,12 @@ function renderStudentsByClass(cls){
   h += '<button class="btn btn-blue" onclick="openScoreModal()"><i class="ti ti-plus"></i> บันทึกคะแนน</button></div></div>';
   h += '<div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="stuSearch" placeholder="ค้นหาชื่อนักเรียน..." oninput="filterStu()"></div>';
   h += '<div class="card" style="padding:0"><div class="table-wrap"><table id="stuTbl">';
-  h += '<thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนน</th><th>สถานะ</th><th style="text-align:right">จัดการ</th></tr></thead><tbody>';
+  h += '<thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนนพฤติกรรม</th><th>คะแนนจิตอาสา</th><th>สถานะ</th><th style="text-align:right">จัดการ</th></tr></thead><tbody>';
   list.forEach(function(s){
     h += '<tr><td>'+s.no+'</td><td style="font-weight:500">'+s.name+'</td>';
-    h += '<td>'+scoreBadge(Number(s.score))+'</td><td>'+statusBadge(Number(s.score))+'</td>';
+    h += '<td>'+scoreBadge(Number(s.score))+'</td>';
+    h += '<td>'+volunteerBadge(Number(s.volunteer||0))+'</td>';
+    h += '<td>'+statusBadge(Number(s.score))+'</td>';
     h += '<td><div class="td-actions"><button class="btn btn-sm btn-blue" onclick="openScoreModal(\''+s.id+'\')"><i class="ti ti-plus"></i></button>';
     h += '<button class="btn btn-sm" onclick="openStudentDetail(\''+s.id+'\')"><i class="ti ti-eye"></i></button></div></td></tr>';
   });
@@ -662,21 +671,39 @@ function openScoreModal(sid){
 function doRecordScore(val){
   var stu = APP.students.find(function(s){return s.id===val.sid;});
   if(!stu){ toast('error','ไม่พบนักเรียน'); return; }
-  var newScore = Math.max(0, Math.min(100, Number(stu.score)+val.delta));
-  var now = fmtDate();
-  var histRef = db.ref('history').push();
+
   var updates = {};
-  updates['students/'+val.sid+'/score'] = newScore;
+  var newBehavior = Number(stu.score);
+  var newVolunteer = Number(stu.volunteer||0);
+  var now = fmtDate();
+
+  if(val.typeName==='จิตอาสา'){
+    // คะแนนจิตอาสา — สะสมไม่มีขีดจำกัด
+    newVolunteer = newVolunteer + val.delta;
+    updates['students/'+val.sid+'/volunteer'] = newVolunteer;
+  } else {
+    // คะแนนพฤติกรรม — อยู่ใน 0-100
+    newBehavior = Math.max(0, Math.min(100, newBehavior + val.delta));
+    updates['students/'+val.sid+'/score'] = newBehavior;
+  }
+
   db.ref().update(updates).then(function(){
+    var histRef = db.ref('history').push();
     return histRef.set({
       studentId:val.sid, name:stu.name, class:stu.class,
-      delta:val.delta, type:val.typeName || (val.delta>0?'เพิ่มคะแนน':'ตัดคะแนน'),
+      delta:val.delta, type:val.typeName,
+      scoreType: val.typeName==='จิตอาสา' ? 'volunteer' : 'behavior',
       reason:val.reason, note:val.note||'', by:APP.displayName,
-      ts:now, scoreAfter:newScore
+      ts:now,
+      scoreAfter: val.typeName==='จิตอาสา' ? newVolunteer : newBehavior
     });
   }).then(function(){
-    stu.score = newScore;
-    toast('success','บันทึกสำเร็จ',(val.delta>0?'+':'')+val.delta+' คะแนน → '+newScore+' คะแนน');
+    stu.score = newBehavior;
+    stu.volunteer = newVolunteer;
+    var msg = val.typeName==='จิตอาสา'
+      ? ('+'+val.delta+' คะแนนจิตอาสา → '+newVolunteer+' คะแนน')
+      : ((val.delta>0?'+':'')+val.delta+' คะแนนพฤติกรรม → '+newBehavior+' คะแนน');
+    toast('success','บันทึกสำเร็จ', msg);
     var active = document.querySelector('.nav-btn.active');
     if(active) active.click();
   }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
@@ -686,10 +713,14 @@ function doRecordScore(val){
 function openStudentDetail(sid){
   var stu = APP.students.find(function(s){return s.id===sid;}); if(!stu) return;
   var score = Number(stu.score);
+  var vol   = Number(stu.volunteer||0);
   Swal.fire({
     title:stu.name,
-    html:'<div class="badge '+(score>=80?'badge-green':score>=60?'badge-yellow':'badge-red')+'" style="font-size:16px;padding:6px 20px">'+score+' คะแนน</div>'
-      +'<div style="font-size:13px;color:#94a3b8;margin:6px 0 14px">'+stu.class+' · '+statusText(score)+'</div>'
+    html:'<div style="display:flex;gap:.75rem;justify-content:center;margin-bottom:12px">'
+      +'<div style="text-align:center"><div class="badge '+(score>=80?'badge-green':score>=60?'badge-yellow':'badge-red')+'" style="font-size:15px;padding:5px 16px">พฤติกรรม '+score+'/100</div></div>'
+      +'<div style="text-align:center"><div class="badge badge-blue" style="font-size:15px;padding:5px 16px">⭐ จิตอาสา '+vol+'</div></div>'
+      +'</div>'
+      +'<div style="font-size:13px;color:#94a3b8;margin-bottom:14px">'+stu.class+' · '+statusText(score)+'</div>'
       +'<div id="sdHist" style="max-height:260px;overflow-y:auto;text-align:left"><div class="loading">กำลังโหลด...</div></div>',
     confirmButtonText:'ปิด', confirmButtonColor:'#2980b9',
     showDenyButton:true, denyButtonText:'<i class="ti ti-plus"></i> บันทึกคะแนน', denyButtonColor:'#1d6b45',
@@ -732,7 +763,12 @@ function loadHistory(){
       h += '<tr data-type="'+(plus?'plus':'minus')+'">';
       h += '<td style="white-space:nowrap;font-size:12px">'+hh.ts+'</td>';
       h += '<td style="font-weight:500">'+hh.name+'</td><td>'+hh.class+'</td>';
-      h += '<td>'+(plus?'<span class="badge badge-green">เพิ่มคะแนน</span>':'<span class="badge badge-red">ตัดคะแนน</span>')+'</td>';
+      var typeBadge = hh.type==='จิตอาสา'
+        ? '<span class="badge badge-blue">⭐ จิตอาสา</span>'
+        : hh.type==='ปรับพฤติกรรม'
+          ? '<span class="badge badge-blue">🔄 ปรับพฤติกรรม</span>'
+          : plus ? '<span class="badge badge-green">เพิ่มคะแนน</span>' : '<span class="badge badge-red">ตัดคะแนน</span>';
+      h += '<td>'+typeBadge+'</td>';
       h += '<td><span style="font-weight:700;color:'+(plus?'var(--green-600)':'var(--red-600)')+'">'+(plus?'+':'')+hh.delta+'</span></td>';
       h += '<td>'+hh.reason+'</td>';
       h += '<td style="font-size:12px">'+hh.by+'</td>';
@@ -860,9 +896,9 @@ function loadReport(){
     h += '</div>';
     report.forEach(function(c,i){
       h += '<div class="tc'+(i===0?' active':'')+'" id="tr_'+c.cls.replace('/','_')+'"><div class="table-wrap"><table>';
-      h += '<thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนน</th><th>สถานะ</th></tr></thead><tbody>';
+      h += '<thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนนพฤติกรรม</th><th>คะแนนจิตอาสา</th><th>สถานะ</th></tr></thead><tbody>';
       c.students.forEach(function(s){
-        h += '<tr><td>'+s.no+'</td><td>'+s.name+'</td><td>'+scoreBadge(Number(s.score))+'</td><td>'+statusBadge(Number(s.score))+'</td></tr>';
+        h += '<tr><td>'+s.no+'</td><td>'+s.name+'</td><td>'+scoreBadge(Number(s.score))+'</td><td>'+volunteerBadge(Number(s.volunteer||0))+'</td><td>'+statusBadge(Number(s.score))+'</td></tr>';
       });
       h += '</tbody></table></div></div>';
     });
@@ -877,10 +913,10 @@ function switchTab(id, btn){
 }
 
 function exportCSV(){
-  var csv = '\uFEFF' + 'ห้อง,เลขที่,ชื่อ-นามสกุล,คะแนน,สถานะ\n';
+  var csv = '\uFEFF' + 'ห้อง,เลขที่,ชื่อ-นามสกุล,คะแนนพฤติกรรม,สถานะ,คะแนนจิตอาสา\n';
   APP.students.forEach(function(s){
     var st = s.score>=80?'ดี':s.score>=60?'ปานกลาง':'ต้องดูแล';
-    csv += s.class+','+s.no+',"'+s.name+'",'+s.score+','+st+'\n';
+    csv += s.class+','+s.no+',"'+s.name+'",'+s.score+','+st+','+(s.volunteer||0)+'\n';
   });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
@@ -891,18 +927,27 @@ function exportCSV(){
 function renderMyScore(){
   var stu = APP.stuData; if(!stu) return;
   var score = Number(stu.score);
+  var vol   = Number(stu.volunteer||0);
   var h = '<div class="container">';
   h += '<div class="stu-hero"><div class="stu-avatar">'+stu.name.charAt(0)+'</div>';
-  h += '<div><div style="font-size:17px;font-weight:700">'+stu.name+'</div><div style="opacity:.8;font-size:13px">'+stu.class+'</div></div>';
-  h += '<div style="margin-left:auto;text-align:right"><div class="score-hero '+scoreCls(score)+'" style="color:#fff">'+score+'</div>';
-  h += '<div style="font-size:12px;opacity:.7">/ 100 คะแนน</div></div></div>';
-  h += '<div class="grid-3" style="margin-bottom:1rem">';
-  h += '<div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-award"></i></div><div><div class="stat-num '+scoreCls(score)+'">'+score+'</div><div class="stat-label">คะแนนปัจจุบัน</div></div></div>';
-  h += '<div class="stat-card"><div class="stat-icon '+(score>=80?'si-green':score>=60?'si-yellow':'si-red')+'"><i class="ti ti-mood-'+(score>=80?'happy':score>=60?'smile':'sad')+'"></i></div>';
-  h += '<div><div class="stat-num" style="font-size:18px">'+statusText(score)+'</div><div class="stat-label">สถานะ</div></div></div>';
-  h += '<div class="stat-card" style="background:var(--yellow-100);border-color:var(--yellow-200)"><div class="stat-icon si-yellow"><i class="ti ti-info-circle"></i></div>';
-  h += '<div><div style="font-size:13px;color:var(--yellow-800);font-weight:500">ภาคเรียนที่ 1/2569</div><div class="stat-label">คะแนนเต็ม 100</div></div></div>';
-  h += '</div><div class="card"><h3>ประวัติคะแนนล่าสุด</h3><div id="myHist"><div class="loading">กำลังโหลด...</div></div></div></div>';
+  h += '<div><div style="font-size:17px;font-weight:700">'+stu.name+'</div><div style="opacity:.8;font-size:13px">'+stu.class+'</div></div></div>';
+
+  h += '<div class="grid-2" style="margin-bottom:1rem">';
+  // คะแนนพฤติกรรม
+  h += '<div class="card" style="text-align:center;border-top:4px solid var(--blue-600)">';
+  h += '<div style="font-size:13px;color:var(--gray-400);font-weight:500;margin-bottom:.5rem">คะแนนพฤติกรรม</div>';
+  h += '<div style="font-size:52px;font-weight:700;'+(score>=80?'color:var(--green-600)':score>=60?'color:var(--yellow-800)':'color:var(--red-600)')+'">'+score+'</div>';
+  h += '<div style="font-size:12px;color:var(--gray-400);margin-bottom:.5rem">/ 100 คะแนน</div>';
+  h += statusBadge(score)+'</div>';
+  // คะแนนจิตอาสา
+  h += '<div class="card" style="text-align:center;border-top:4px solid var(--yellow-400)">';
+  h += '<div style="font-size:13px;color:var(--gray-400);font-weight:500;margin-bottom:.5rem">คะแนนจิตอาสา</div>';
+  h += '<div style="font-size:52px;font-weight:700;color:var(--yellow-800)">'+vol+'</div>';
+  h += '<div style="font-size:12px;color:var(--gray-400);margin-bottom:.5rem">สะสมตลอดปี</div>';
+  h += '<span class="badge badge-blue">⭐ สะสม</span></div>';
+  h += '</div>';
+
+  h += '<div class="card"><h3>ประวัติคะแนนล่าสุด</h3><div id="myHist"><div class="loading">กำลังโหลด...</div></div></div></div>';
   showPage(h);
 
   db.ref('history').once('value').then(function(snap){
