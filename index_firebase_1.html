@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ระบบคะแนนพฤติกรรม — โรงเรียนบ้านสวนวิทยาคม</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+:root{
+  --blue-50:#f0f8fc;--blue-100:#cbe8f2;--blue-200:#9dd1e6;
+  --blue-400:#4dadd0;--blue-600:#2980b9;--blue-800:#1a5c85;
+  --yellow-100:#fff6c3;--yellow-200:#ffe980;--yellow-800:#7a5c00;
+  --red-100:#fde8e8;--red-600:#e53e3e;
+  --green-100:#e1f5ee;--green-600:#1d6b45;
+  --gray-100:#f1f5f9;--gray-200:#e2e8f0;--gray-400:#94a3b8;
+  --gray-600:#475569;--gray-800:#1e293b;
+  --radius:10px;--shadow:0 2px 12px rgba(41,128,185,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun',sans-serif;background:var(--blue-50);color:var(--gray-800);min-height:100vh}
+.topbar{background:var(--blue-600);color:#fff;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+.topbar-brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px}
+.logo{width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center}
+.chip-user{background:rgba(255,255,255,.15);border-radius:20px;padding:4px 14px;font-size:13px}
+.nav-wrap{background:#fff;border-bottom:2px solid var(--blue-100);padding:0 1.5rem;position:sticky;top:56px;z-index:40;overflow-x:auto;white-space:nowrap}
+.nav-btn{display:inline-flex;align-items:center;gap:6px;padding:12px 16px;border:none;background:none;font-family:inherit;font-size:14px;color:var(--gray-400);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s}
+.nav-btn:hover{color:var(--blue-600)}
+.nav-btn.active{color:var(--blue-600);border-bottom-color:var(--blue-600);font-weight:600}
+.container{padding:1.5rem;max-width:1100px;margin:0 auto}
+@media(max-width:600px){.container{padding:1rem}}
+.card{background:#fff;border-radius:var(--radius);border:1.5px solid var(--blue-100);padding:1.25rem;box-shadow:var(--shadow)}
+.card+.card{margin-top:1rem}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+@media(max-width:700px){.grid-4,.grid-3{grid-template-columns:1fr 1fr}.grid-2{grid-template-columns:1fr}}
+.stat-card{background:#fff;border-radius:var(--radius);border:1.5px solid var(--blue-100);padding:1rem 1.25rem;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+.stat-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.si-blue{background:var(--blue-100);color:var(--blue-600)}
+.si-yellow{background:var(--yellow-100);color:var(--yellow-800)}
+.si-red{background:var(--red-100);color:var(--red-600)}
+.si-green{background:var(--green-100);color:var(--green-600)}
+.stat-num{font-size:26px;font-weight:700;line-height:1}
+.stat-label{font-size:12px;color:var(--gray-400);margin-top:2px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--radius);font-size:14px;font-family:inherit;cursor:pointer;border:1.5px solid var(--gray-200);background:#fff;color:var(--gray-800);font-weight:500;transition:.15s;white-space:nowrap}
+.btn:hover{background:var(--gray-100)}
+.btn:active{transform:scale(.98)}
+.btn-blue{background:var(--blue-600);color:#fff;border-color:var(--blue-600)}
+.btn-blue:hover{background:var(--blue-800)}
+.btn-green{background:var(--green-600);color:#fff;border-color:var(--green-600)}
+.btn-green:hover{background:#155c37}
+.btn-red{background:var(--red-600);color:#fff;border-color:var(--red-600)}
+.btn-yellow{background:var(--yellow-100);color:var(--yellow-800);border-color:var(--yellow-200)}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.form-group{margin-bottom:.85rem}
+.form-group label{font-size:13px;color:var(--gray-600);display:block;margin-bottom:5px;font-weight:500}
+input,select,textarea{width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px;font-family:inherit;background:#fff;color:var(--gray-800);transition:.15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue-400);box-shadow:0 0 0 3px rgba(77,173,208,.15)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+@media(max-width:500px){.form-row{grid-template-columns:1fr}}
+.table-wrap{overflow-x:auto;border-radius:var(--radius)}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:500px}
+thead th{background:var(--blue-100);color:var(--blue-800);font-weight:600;padding:10px 12px;text-align:left;font-size:12px}
+tbody tr{border-bottom:1px solid var(--blue-50)}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--blue-50)}
+td{padding:9px 12px;vertical-align:middle}
+.td-actions{display:flex;gap:6px;justify-content:flex-end}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-blue{background:var(--blue-100);color:var(--blue-800)}
+.badge-green{background:var(--green-100);color:var(--green-600)}
+.badge-red{background:var(--red-100);color:var(--red-600)}
+.badge-yellow{background:var(--yellow-100);color:var(--yellow-800)}
+.badge-gray{background:var(--gray-100);color:var(--gray-600)}
+.hist-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--blue-50)}
+.hist-item:last-child{border-bottom:none}
+.hist-dot{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.dot-plus{background:var(--green-100);color:var(--green-600)}
+.dot-minus{background:var(--red-100);color:var(--red-600)}
+.pbar{height:8px;background:var(--blue-100);border-radius:4px;overflow:hidden;margin:6px 0}
+.pbar-fill{height:100%;border-radius:4px;transition:width .4s}
+.search-box{position:relative}
+.search-box i{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--gray-400);font-size:16px;pointer-events:none}
+.search-box input{padding-left:36px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:1rem}
+.chip{padding:5px 14px;border-radius:20px;font-size:13px;border:1.5px solid var(--blue-100);background:#fff;color:var(--gray-600);cursor:pointer;font-family:inherit;transition:.15s}
+.chip:hover{background:var(--blue-100)}
+.chip.active{background:var(--blue-600);color:#fff;border-color:var(--blue-600);font-weight:600}
+.score-hero{font-size:64px;font-weight:700;line-height:1}
+.score-good{color:var(--green-600)}
+.score-mid{color:var(--yellow-800)}
+.score-low{color:var(--red-600)}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--blue-100) 0%,var(--yellow-100) 100%)}
+.login-card{background:#fff;border-radius:16px;padding:2.25rem 2rem;width:340px;box-shadow:0 4px 24px rgba(41,128,185,.15);border:1.5px solid var(--blue-100)}
+.login-logo{width:64px;height:64px;border-radius:16px;background:var(--blue-600);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;font-size:28px;color:#fff}
+.role-tabs{display:flex;border-radius:var(--radius);overflow:hidden;border:1.5px solid var(--blue-100);margin-bottom:1.25rem}
+.role-tab{flex:1;padding:9px;border:none;background:#fff;font-family:inherit;font-size:13px;color:var(--gray-600);cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:5px}
+.role-tab:first-child{border-right:1.5px solid var(--blue-100)}
+.role-tab.active{background:var(--blue-600);color:#fff;font-weight:600}
+.tab-bar{display:flex;gap:4px;border-bottom:2px solid var(--blue-100);margin-bottom:1rem;overflow-x:auto}
+.tbtn{padding:8px 14px;border:none;background:none;font-family:inherit;font-size:13px;color:var(--gray-400);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:.15s}
+.tbtn.active{color:var(--blue-600);border-bottom-color:var(--blue-600);font-weight:600}
+.tc{display:none}.tc.active{display:block}
+.stu-hero{background:linear-gradient(135deg,var(--blue-600),var(--blue-800));border-radius:var(--radius);padding:1.5rem;color:#fff;display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+.stu-avatar{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0}
+.loading{text-align:center;padding:2.5rem;color:var(--gray-400);font-size:14px}
+.empty{text-align:center;padding:2.5rem;color:var(--gray-400);font-size:14px}
+h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+h3{font-size:15px;font-weight:600;margin-bottom:.6rem}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.5rem}
+.text-muted{color:var(--gray-400);font-size:12px}
+.img-preview{max-width:100%;max-height:180px;border-radius:8px;border:2px solid var(--blue-100);margin-top:.5rem;display:none}
+.swal2-popup{font-family:'Sarabun',sans-serif!important;border-radius:14px!important}
+.swal2-confirm,.swal2-cancel,.swal2-deny{border-radius:var(--radius)!important}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo"><i class="ti ti-star-filled"></i></div>
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <div style="font-size:18px;font-weight:700">ระบบคะแนนพฤติกรรม</div>
+      <div style="font-size:13px;color:var(--gray-400);margin-top:3px">โรงเรียนบ้านสวนวิทยาคม</div>
+    </div>
+    <div class="role-tabs">
+      <button class="role-tab active" id="roleTeacher" onclick="pickRole('teacher')"><i class="ti ti-school" style="font-size:15px"></i> ครู</button>
+      <button class="role-tab" id="roleStudent" onclick="pickRole('student')"><i class="ti ti-user" style="font-size:15px"></i> นักเรียน</button>
+    </div>
+    <div id="teacherArea">
+      <div class="form-group"><label>ชื่อผู้ใช้</label><input id="loginUser" type="text" placeholder="username"></div>
+      <div class="form-group"><label>รหัสผ่าน</label><input id="loginPass" type="password" placeholder="password" onkeypress="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn btn-blue" style="width:100%" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+    </div>
+    <div id="studentArea" style="display:none">
+      <div style="background:var(--yellow-100);border:1.5px solid var(--yellow-200);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;color:var(--yellow-800);margin-bottom:1rem"><i class="ti ti-info-circle"></i> กรอกชื่อ-นามสกุลให้ตรงกับทะเบียน</div>
+      <div class="form-group"><label>ห้องเรียน</label><select id="stuClass"><option value="">-- เลือกห้อง --</option></select></div>
+      <div class="form-group"><label>ชื่อ-นามสกุล</label><input id="stuName" type="text" placeholder="เช่น กนกพร รักเรียน" onkeypress="if(event.key==='Enter')doStudentLogin()"></div>
+      <button class="btn btn-blue" style="width:100%" id="stuBtn" onclick="doStudentLogin()">เข้าสู่ระบบ</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="mainApp" style="display:none">
+  <div class="topbar">
+    <div class="topbar-brand"><div class="logo"><i class="ti ti-star-filled" style="font-size:16px"></i></div><span>ระบบคะแนนพฤติกรรม</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="chip-user" id="topUser"></span>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border-color:transparent" onclick="doLogout()"><i class="ti ti-logout"></i> ออก</button>
+    </div>
+  </div>
+  <div class="nav-wrap" id="mainNav"></div>
+  <div id="pageArea"></div>
+</div>
+
+<!-- FIREBASE SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+import { getDatabase, ref, set, get, push, update, remove, onValue, child }
+  from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBrcxjvO4sit1iod6tT8QA5genjxjaKAMk",
+  authDomain: "behavior-score-36b68.firebaseapp.com",
+  databaseURL: "https://behavior-score-36b68-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "behavior-score-36b68",
+  storageBucket: "behavior-score-36b68.firebasestorage.app",
+  messagingSenderId: "967348590390",
+  appId: "1:967348590390:web:c0f0135eb9b3f76bda0597"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ── PRESETS ──
+const PRESET_PLUS  = [{l:'จิตอาสา',v:10},{l:'เข้าร่วมกิจกรรมโรงเรียน',v:10}];
+const PRESET_MINUS = [
+  {l:'มาสาย',v:5},{l:'ขาดเรียน',v:5},{l:'โดดเรียน',v:5},
+  {l:'ทรงผมผิดระเบียบ',v:5},{l:'แต่งกายผิดระเบียบ',v:5},
+  {l:'สูบบุหรี่หรือบุหรี่ไฟฟ้า',v:30},{l:'ทะเลาะวิวาท',v:30}
+];
+
+// ── USERS (hardcoded — แก้ตรงนี้เพื่อเพิ่มครู) ──
+const USERS = {
+  teacher1 : { password:'1234',      role:'teacher', displayName:'ครูศุภลักษณ์' },
+  teacher2 : { password:'1234',      role:'teacher', displayName:'ครูวัชรพล' },
+  admin    : { password:'admin2569', role:'admin',   displayName:'ผู้ดูแลระบบ' },
+};
+
+// ── STATE ──
+let APP = { role:'', user:'', displayName:'', students:[], classes:[], stuData:null };
+let _stype = 1, _imgB64 = '', _imgMime = '', _imgName = '';
+
+// ── HELPERS ──
+const $ = id => document.getElementById(id);
+const makeId = (no, cls) => String(no).padStart(3,'0') + '_' + cls.replace(/[\/\s]/g,'');
+const scoreCls = s => s>=80?'score-good':s>=60?'score-mid':'score-low';
+const scoreBadge = s => {
+  const c = s>=80?'badge-green':s>=60?'badge-yellow':'badge-red';
+  return `<span class="badge ${c}">${s}</span>`;
+};
+const statusBadge = s => s>=80?'<span class="badge badge-green">ดี</span>':s>=60?'<span class="badge badge-yellow">ปานกลาง</span>':'<span class="badge badge-red">ต้องดูแล</span>';
+const statusText = s => s>=80?'ดี':s>=60?'ปานกลาง':'ต้องดูแล';
+const showPage = h => $('pageArea').innerHTML = h;
+const toast = (icon,title,text='') => Swal.fire({icon,title,text,toast:true,position:'top-end',showConfirmButton:false,timer:3000,timerProgressBar:true});
+const fmtDate = () => new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+// ── SETUP INITIAL DATA (รันครั้งแรกเท่านั้น) ──
+async function setupInitialData() {
+  const snap = await get(ref(db, 'setup_done'));
+  if (snap.exists()) return;
+  await set(ref(db, 'setup_done'), true);
+}
+
+// ── LOAD STUDENTS FROM FIREBASE ──
+async function loadStudents() {
+  const snap = await get(ref(db, 'students'));
+  const students = [];
+  if (snap.exists()) {
+    snap.forEach(child => {
+      students.push({ id: child.key, ...child.val() });
+    });
+  }
+  APP.students = students.sort((a,b) => Number(a.no) - Number(b.no));
+  APP.classes  = [...new Set(students.map(s => s.class))].sort();
+  // โหลดห้องเรียนลง select นักเรียน
+  const sel = $('stuClass');
+  if (sel) {
+    sel.innerHTML = '<option value="">-- เลือกห้อง --</option>';
+    APP.classes.forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  }
+  return APP.students;
+}
+
+// ── LOGIN ──
+let _loginRole = 'teacher';
+function pickRole(r) {
+  _loginRole = r;
+  $('roleTeacher').classList.toggle('active', r==='teacher');
+  $('roleStudent').classList.toggle('active', r==='student');
+  $('teacherArea').style.display = r==='teacher' ? '' : 'none';
+  $('studentArea').style.display = r==='student' ? '' : 'none';
+}
+
+function doLogin() {
+  const u = $('loginUser').value.trim();
+  const p = $('loginPass').value.trim();
+  if (!u||!p) { toast('warning','กรุณากรอกข้อมูลให้ครบ'); return; }
+  const usr = USERS[u];
+  if (!usr || usr.password !== p) {
+    Swal.fire({icon:'error',title:'เข้าสู่ระบบไม่สำเร็จ',text:'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',confirmButtonColor:'#2980b9'});
+    return;
+  }
+  APP.user = u; APP.displayName = usr.displayName; APP.role = usr.role;
+  startApp();
+}
+
+async function doStudentLogin() {
+  const cls  = $('stuClass').value;
+  const name = $('stuName').value.trim();
+  if (!cls||!name) { toast('warning','กรุณาเลือกห้องและกรอกชื่อ'); return; }
+  $('stuBtn').disabled = true; $('stuBtn').textContent = 'กำลังตรวจสอบ...';
+  await loadStudents();
+  $('stuBtn').disabled = false; $('stuBtn').textContent = 'เข้าสู่ระบบ';
+  const stu = APP.students.find(s => s.class===cls && s.name.trim()===name);
+  if (!stu) { Swal.fire({icon:'error',title:'ไม่พบข้อมูล',text:'ไม่พบชื่อนักเรียนในระบบ กรุณาตรวจสอบการสะกดชื่อ',confirmButtonColor:'#2980b9'}); return; }
+  APP.user = stu.id; APP.displayName = stu.name; APP.role = 'student'; APP.stuData = stu;
+  startApp();
+}
+
+function doLogout() {
+  APP = { role:'', user:'', displayName:'', students:[], classes:[], stuData:null };
+  $('mainApp').style.display = 'none';
+  $('loginScreen').style.display = 'flex';
+}
+
+// ── START APP ──
+async function startApp() {
+  $('loginScreen').style.display = 'none';
+  $('mainApp').style.display = 'block';
+  $('topUser').textContent = APP.displayName;
+  if (APP.role==='teacher'||APP.role==='admin') {
+    $('mainNav').innerHTML = [
+      ['dash','ภาพรวม','ti-dashboard'],['students','นักเรียน','ti-users'],
+      ['add-score','บันทึกคะแนน','ti-edit'],['history','ประวัติ','ti-history'],['report','รายงาน','ti-chart-bar']
+    ].map((t,i) => `<button class="nav-btn${i===0?' active':''}" id="nav_${t[0]}" onclick="navTo('${t[0]}',this)"><i class="ti ${t[2]}"></i> ${t[1]}</button>`).join('');
+    await loadStudents();
+    renderDashboard();
+  } else {
+    $('mainNav').innerHTML = [
+      ['my-score','คะแนนของฉัน','ti-star'],['my-history','ประวัติคะแนน','ti-history']
+    ].map((t,i) => `<button class="nav-btn${i===0?' active':''}" id="nav_${t[0]}" onclick="navTo('${t[0]}',this)"><i class="ti ${t[2]}"></i> ${t[1]}</button>`).join('');
+    renderMyScore();
+  }
+}
+
+function navTo(page, btn) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const map = {
+    'dash': renderDashboard, 'students': () => renderStudents(''),
+    'add-score': showAddScorePanel, 'history': loadHistory,
+    'report': loadReport, 'my-score': renderMyScore,
+    'my-history': () => loadStudentHistory(APP.user)
+  };
+  if(map[page]) map[page]();
+}
+window.navTo = navTo;
+
+// ── DASHBOARD ──
+async function renderDashboard() {
+  showPage('<div class="container"><div class="loading"><i class="ti ti-loader"></i> กำลังโหลด...</div></div>');
+  await loadStudents();
+  const histSnap = await get(ref(db,'history'));
+  const history = [];
+  if (histSnap.exists()) histSnap.forEach(c => history.unshift({id:c.key,...c.val()}));
+
+  const s = APP.students;
+  const total = s.length;
+  const avg = total ? Math.round(s.reduce((a,x)=>a+Number(x.score),0)/total) : 0;
+  const above80 = s.filter(x=>x.score>=80).length;
+  const below60 = s.filter(x=>x.score<60).length;
+
+  let h = `<div class="container">
+  <div class="section-header">
+    <div><h2 style="margin:0">ภาพรวมคะแนนพฤติกรรม</h2><div class="text-muted">ภาคเรียนที่ 1 ปีการศึกษา 2569</div></div>
+    <button class="btn btn-blue" onclick="showAddScorePanel()"><i class="ti ti-plus"></i> บันทึกคะแนน</button>
+  </div>
+  <div class="grid-4" style="margin-bottom:1.25rem">
+    <div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-users"></i></div><div><div class="stat-num">${total}</div><div class="stat-label">นักเรียนทั้งหมด</div></div></div>
+    <div class="stat-card"><div class="stat-icon si-yellow"><i class="ti ti-star"></i></div><div><div class="stat-num">${avg}</div><div class="stat-label">คะแนนเฉลี่ย</div></div></div>
+    <div class="stat-card"><div class="stat-icon si-green"><i class="ti ti-thumb-up"></i></div><div><div class="stat-num">${above80}</div><div class="stat-label">คะแนน ≥ 80</div></div></div>
+    <div class="stat-card"><div class="stat-icon si-red"><i class="ti ti-alert-circle"></i></div><div><div class="stat-num">${below60}</div><div class="stat-label">คะแนน &lt; 60</div></div></div>
+  </div>
+  <div class="grid-2">`;
+
+  const watch = s.filter(x=>x.score<60);
+  h += `<div class="card"><h3>นักเรียนที่ต้องดูแล <span class="badge badge-red">${watch.length}</span></h3>`;
+  if (!watch.length) h += '<div class="empty"><i class="ti ti-mood-happy" style="font-size:28px;color:var(--blue-200)"></i><br>ไม่มีนักเรียนคะแนนต่ำ</div>';
+  else watch.forEach(st => {
+    h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--blue-50)">
+      <div><div style="font-weight:500;font-size:14px">${st.name}</div><div class="text-muted">${st.class}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">${scoreBadge(st.score)}<button class="btn btn-sm btn-blue" onclick="openScoreModal('${st.id}')"><i class="ti ti-plus"></i></button></div>
+    </div>`;
+  });
+  h += '</div>';
+
+  h += `<div class="card"><h3>กิจกรรมล่าสุด</h3>`;
+  if (!history.length) h += '<div class="empty">ยังไม่มีการบันทึก</div>';
+  else history.slice(0,7).forEach(hh => {
+    h += `<div class="hist-item">
+      <div class="hist-dot ${hh.delta>0?'dot-plus':'dot-minus'}">${hh.delta>0?'+'+hh.delta:hh.delta}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${hh.name}</div>
+      <div class="text-muted">${hh.reason}${hh.note?' · '+hh.note:''}</div></div>
+      <div class="text-muted" style="white-space:nowrap;font-size:11px">${(hh.ts||'').split(' ')[1]||''}</div>
+    </div>`;
+  });
+  h += '</div></div></div>';
+  showPage(h);
+}
+window.renderDashboard = renderDashboard;
+
+// ── STUDENTS ──
+function renderStudents(fc) {
+  const list = fc ? APP.students.filter(s=>s.class===fc) : APP.students;
+  let h = `<div class="container">
+  <div class="section-header"><h2 style="margin:0">รายชื่อนักเรียน</h2>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn" onclick="openAddStudentModal()"><i class="ti ti-user-plus"></i> เพิ่มนักเรียน</button>
+      <button class="btn btn-blue" onclick="openScoreModal()"><i class="ti ti-plus"></i> บันทึกคะแนน</button>
+    </div>
+  </div>
+  <div class="chips">
+    <button class="chip${!fc?' active':''}" onclick="renderStudents('')">ทั้งหมด</button>
+    ${APP.classes.map(c=>`<button class="chip${fc===c?' active':''}" onclick="renderStudents('${c}')">${c}</button>`).join('')}
+  </div>
+  <div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="stuSearch" placeholder="ค้นหาชื่อนักเรียน..." oninput="filterStu()"></div>
+  <div class="card" style="padding:0"><div class="table-wrap"><table id="stuTbl">
+    <thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>ห้อง</th><th>คะแนน</th><th>สถานะ</th><th style="text-align:right">จัดการ</th></tr></thead>
+    <tbody>`;
+  list.forEach(s => {
+    h += `<tr><td>${s.no}</td><td style="font-weight:500">${s.name}</td><td>${s.class}</td>
+    <td>${scoreBadge(Number(s.score))}</td><td>${statusBadge(Number(s.score))}</td>
+    <td><div class="td-actions">
+      <button class="btn btn-sm btn-blue" onclick="openScoreModal('${s.id}')"><i class="ti ti-plus"></i></button>
+      <button class="btn btn-sm" onclick="openStudentDetail('${s.id}')"><i class="ti ti-eye"></i></button>
+    </div></td></tr>`;
+  });
+  h += '</tbody></table></div></div></div>';
+  showPage(h);
+}
+window.renderStudents = renderStudents;
+window.filterStu = () => {
+  const q = $('stuSearch').value.toLowerCase();
+  document.querySelectorAll('#stuTbl tbody tr').forEach(r => r.style.display = r.textContent.toLowerCase().includes(q)?'':'none');
+};
+
+// ── ADD STUDENT ──
+window.openAddStudentModal = () => {
+  Swal.fire({
+    title:'เพิ่มนักเรียนใหม่',
+    html:`<div style="text-align:left">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เลขที่</label>
+      <input id="sNo" class="swal2-input" type="number" min="1" style="font-family:Sarabun;margin:0 0 10px;width:100%">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">ชื่อ-นามสกุล</label>
+      <input id="sName" class="swal2-input" placeholder="ชื่อ นามสกุล" style="font-family:Sarabun;margin:0 0 10px;width:100%">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">ห้อง</label>
+      <input id="sCls" class="swal2-input" placeholder="เช่น ม.2/1" style="font-family:Sarabun;margin:0;width:100%">
+    </div>`,
+    confirmButtonText:'เพิ่มนักเรียน',confirmButtonColor:'#2980b9',showCancelButton:true,cancelButtonText:'ยกเลิก',
+    preConfirm: () => {
+      const no=$('sNo').value.trim(), name=$('sName').value.trim(), cls=$('sCls').value.trim();
+      if(!no||!name||!cls){Swal.showValidationMessage('กรุณากรอกข้อมูลให้ครบ');return false}
+      return{no,name,cls};
+    }
+  }).then(async r => {
+    if(!r.isConfirmed) return;
+    const id = makeId(r.value.no, r.value.cls);
+    await set(ref(db,`students/${id}`), { no:Number(r.value.no), name:r.value.name, class:r.value.cls, score:100 });
+    toast('success','เพิ่มนักเรียนสำเร็จ');
+    await loadStudents();
+    renderStudents('');
+  });
+};
+
+// ── SCORE FORM ──
+function buildScoreForm(sid='') {
+  const opts = APP.students.map(s=>`<option value="${s.id}"${s.id===sid?' selected':''}>${s.name} (${s.class})</option>`).join('');
+  return `<div id="sfWrap" style="text-align:left">
+    <div class="form-group"><label>นักเรียน</label><select id="fSid" style="font-family:Sarabun"><option value="">-- เลือกนักเรียน --</option>${opts}</select></div>
+    <div class="form-group"><label>ประเภท</label>
+      <div style="display:flex;gap:.5rem">
+        <button type="button" id="fBtnPlus" class="btn btn-green" style="flex:1" onclick="setSType(1)"><i class="ti ti-plus"></i> เพิ่มคะแนน</button>
+        <button type="button" id="fBtnMinus" class="btn" style="flex:1;color:var(--red-600);border-color:var(--red-100)" onclick="setSType(-1)"><i class="ti ti-minus"></i> ตัดคะแนน</button>
+      </div>
+    </div>
+    <div class="form-group"><label>เหตุผลด่วน</label>
+      <div id="fPresets" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+        ${PRESET_PLUS.map(p=>`<button type="button" class="chip" onclick="pickPreset('${p.l}',${p.v})">${p.l} (+${p.v})</button>`).join('')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+      <div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน</label><input id="fDelta" type="number" value="1" min="1" max="100" style="font-family:Sarabun"></div>
+      <div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label><input id="fReason" type="text" placeholder="ระบุเหตุผล" style="font-family:Sarabun"></div>
+    </div>
+    <div class="form-group"><label>หมายเหตุ (ไม่บังคับ)</label><textarea id="fNote" rows="2" style="font-family:Sarabun" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>
+    <div class="form-group"><label><i class="ti ti-camera" style="font-size:15px;vertical-align:-2px"></i> แนบหลักฐาน</label>
+      <input type="file" id="fImg" accept="image/*" onchange="previewImg(this)" style="font-family:Sarabun">
+      <img id="fImgPrev" class="img-preview">
+    </div>
+  </div>`;
+}
+
+window.setSType = t => {
+  _stype = t;
+  const pp=$('fBtnPlus'), pm=$('fBtnMinus');
+  if(t===1){
+    pp.className='btn btn-green';pp.style.flex='1';
+    pm.className='btn';pm.style.cssText='flex:1;color:var(--red-600);border-color:var(--red-100)';
+    $('fPresets').innerHTML=PRESET_PLUS.map(p=>`<button type="button" class="chip" onclick="pickPreset('${p.l}',${p.v})">${p.l} (+${p.v})</button>`).join('');
+  } else {
+    pm.className='btn btn-red';pm.style.flex='1';
+    pp.className='btn';pp.style.cssText='flex:1';
+    $('fPresets').innerHTML=PRESET_MINUS.map(p=>`<button type="button" class="chip" onclick="pickPreset('${p.l}',${p.v})">${p.l} (-${p.v})</button>`).join('');
+  }
+};
+window.pickPreset = (l,v) => { $('fReason').value=l; $('fDelta').value=v; };
+window.previewImg = input => {
+  if(!input.files||!input.files[0]) return;
+  const file=input.files[0]; _imgMime=file.type; _imgName=file.name;
+  const r=new FileReader(); r.onload=e=>{ _imgB64=e.target.result.split(',')[1]; $('fImgPrev').src=e.target.result; $('fImgPrev').style.display='block'; }; r.readAsDataURL(file);
+};
+
+function collectForm() {
+  const sid=$('fSid').value, delta=parseInt($('fDelta').value)||0, reason=$('fReason').value.trim(), note=$('fNote').value.trim();
+  if(!sid){Swal.showValidationMessage('กรุณาเลือกนักเรียน');return false}
+  if(!reason){Swal.showValidationMessage('กรุณาระบุเหตุผล');return false}
+  if(delta<=0){Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน');return false}
+  return{sid,delta:_stype*delta,reason,note};
+}
+
+window.showAddScorePanel = () => {
+  _stype=1; _imgB64=''; _imgMime=''; _imgName='';
+  showPage(`<div class="container">
+    <div class="section-header"><h2 style="margin:0">บันทึกคะแนนพฤติกรรม</h2></div>
+    <div class="card">${buildScoreForm()}
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button class="btn btn-green" onclick="submitFromPanel()"><i class="ti ti-check"></i> บันทึก</button>
+      </div>
+    </div>
+  </div>`);
+};
+
+window.submitFromPanel = async () => {
+  const val = collectForm(); if(!val) return;
+  await doRecordScore(val);
+};
+
+window.openScoreModal = (sid='') => {
+  _stype=1; _imgB64=''; _imgMime=''; _imgName='';
+  Swal.fire({
+    title:'บันทึกคะแนนพฤติกรรม', html:buildScoreForm(sid), width:540,
+    confirmButtonText:'<i class="ti ti-check"></i> บันทึก',confirmButtonColor:'#2980b9',
+    showCancelButton:true,cancelButtonText:'ยกเลิก',
+    preConfirm: () => collectForm()
+  }).then(async r => { if(r.isConfirmed&&r.value) await doRecordScore(r.value); });
+};
+
+async function doRecordScore(val) {
+  const stu = APP.students.find(s=>s.id===val.sid);
+  if(!stu){toast('error','ไม่พบนักเรียน');return}
+  const newScore = Math.max(0, Math.min(100, Number(stu.score)+val.delta));
+  const now = fmtDate();
+  const histRef = push(ref(db,'history'));
+  await Promise.all([
+    set(ref(db,`students/${val.sid}/score`), newScore),
+    set(histRef, { studentId:val.sid, name:stu.name, class:stu.class, delta:val.delta,
+      type:val.delta>0?'เพิ่มคะแนน':'ตัดคะแนน', reason:val.reason, note:val.note||'', by:APP.displayName, ts:now, scoreAfter:newScore })
+  ]);
+  stu.score = newScore;
+  toast('success','บันทึกสำเร็จ',`${val.delta>0?'+':''}${val.delta} คะแนน → ${newScore} คะแนน`);
+  const nav = document.querySelector('.nav-btn.active'); if(nav) nav.click();
+}
+
+// ── STUDENT DETAIL ──
+window.openStudentDetail = async sid => {
+  const stu = APP.students.find(s=>s.id===sid); if(!stu) return;
+  const score = Number(stu.score);
+  const result = await Swal.fire({
+    title:stu.name,
+    html:`<div class="badge ${score>=80?'badge-green':score>=60?'badge-yellow':'badge-red'}" style="font-size:16px;padding:6px 20px">${score} คะแนน</div>
+    <div style="font-size:13px;color:#94a3b8;margin:6px 0 14px">${stu.class} · ${statusText(score)}</div>
+    <div id="sdHist" style="max-height:260px;overflow-y:auto;text-align:left"><div class="loading">กำลังโหลด...</div></div>`,
+    confirmButtonText:'ปิด',confirmButtonColor:'#2980b9',
+    showDenyButton:true,denyButtonText:'<i class="ti ti-plus"></i> บันทึกคะแนน',denyButtonColor:'#1d6b45',
+    didOpen: async () => {
+      const snap = await get(ref(db,'history'));
+      const el = $('sdHist'); if(!el) return;
+      const hist = [];
+      if(snap.exists()) snap.forEach(c=>{ if(c.val().studentId===sid) hist.unshift({id:c.key,...c.val()}); });
+      if(!hist.length){el.innerHTML='<div class="empty">ยังไม่มีประวัติ</div>';return}
+      el.innerHTML = hist.map(h=>`<div class="hist-item">
+        <div class="hist-dot ${h.delta>0?'dot-plus':'dot-minus'}">${h.delta>0?'+'+h.delta:h.delta}</div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:500">${h.reason}</div>
+        ${h.note?`<div class="text-muted">${h.note}</div>`:''}
+        <div class="text-muted">${h.ts} · ${h.by}</div></div>
+      </div>`).join('');
+    }
+  });
+  if(result.isDenied) openScoreModal(sid);
+};
+
+// ── HISTORY ──
+window.loadHistory = async () => {
+  showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
+  const snap = await get(ref(db,'history'));
+  const hist = [];
+  if(snap.exists()) snap.forEach(c => hist.unshift({id:c.key,...c.val()}));
+
+  let h = `<div class="container">
+  <div class="section-header"><h2 style="margin:0">ประวัติการบันทึกคะแนน</h2>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn" onclick="filterHist('plus')"><i class="ti ti-arrow-up" style="color:var(--green-600)"></i> เพิ่มคะแนน</button>
+      <button class="btn" onclick="filterHist('minus')"><i class="ti ti-arrow-down" style="color:var(--red-600)"></i> ตัดคะแนน</button>
+      <button class="btn" onclick="filterHist('')"><i class="ti ti-list"></i> ทั้งหมด</button>
+    </div>
+  </div>
+  <div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="histSearch" placeholder="ค้นหา..." oninput="filterHistSearch()"></div>
+  <div class="card" style="padding:0"><div class="table-wrap"><table id="histTbl">
+    <thead><tr><th>วันที่-เวลา</th><th>ชื่อนักเรียน</th><th>ห้อง</th><th>ประเภท</th><th>คะแนน</th><th>เหตุผล</th><th>หมายเหตุ</th><th>บันทึกโดย</th><th style="text-align:right">จัดการ</th></tr></thead>
+    <tbody>`;
+
+  if(!hist.length) h += '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-400)">ยังไม่มีประวัติ</td></tr>';
+  else hist.forEach(hh => {
+    const plus = hh.delta>0;
+    h += `<tr data-type="${plus?'plus':'minus'}">
+      <td style="white-space:nowrap;font-size:12px">${hh.ts}</td>
+      <td style="font-weight:500">${hh.name}</td><td>${hh.class}</td>
+      <td>${plus?'<span class="badge badge-green">เพิ่มคะแนน</span>':'<span class="badge badge-red">ตัดคะแนน</span>'}</td>
+      <td><span style="font-weight:700;color:${plus?'var(--green-600)':'var(--red-600)'}">${plus?'+':''}${hh.delta}</span></td>
+      <td>${hh.reason}</td><td>${hh.note||''}</td>
+      <td style="font-size:12px">${hh.by}</td>
+      <td><div class="td-actions">
+        <button class="btn btn-sm btn-icon" title="แก้ไข" onclick="openEditHist('${hh.id}',${hh.delta},'${(hh.reason||'').replace(/'/g,"\\'")}','${(hh.note||'').replace(/'/g,"\\'")}')"><i class="ti ti-edit"></i></button>
+        <button class="btn btn-sm btn-icon" style="color:var(--red-600);border-color:var(--red-100)" title="ลบ" onclick="deleteHist('${hh.id}','${hh.studentId}',${hh.delta})"><i class="ti ti-trash"></i></button>
+      </div></td>
+    </tr>`;
+  });
+  h += '</tbody></table></div></div></div>';
+  showPage(h);
+};
+
+window.filterHist = type => document.querySelectorAll('#histTbl tbody tr').forEach(r => r.style.display=(!type||r.dataset.type===type)?'':'none');
+window.filterHistSearch = () => { const q=$('histSearch').value.toLowerCase(); document.querySelectorAll('#histTbl tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none'); };
+
+window.openEditHist = (histId, delta, reason, note) => {
+  Swal.fire({
+    title:'แก้ไขรายการ',
+    html:`<div style="text-align:left">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน (+ได้รับ / -ถูกหัก)</label>
+      <input id="eDelta" class="swal2-input" type="number" value="${delta}" style="font-family:Sarabun;width:100%;margin:0 0 10px">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label>
+      <input id="eReason" class="swal2-input" value="${reason}" style="font-family:Sarabun;width:100%;margin:0 0 10px">
+      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">หมายเหตุ</label>
+      <textarea id="eNote" class="swal2-textarea" style="font-family:Sarabun;width:100%;margin:0">${note}</textarea>
+    </div>`,
+    confirmButtonText:'บันทึกการแก้ไข',confirmButtonColor:'#2980b9',showCancelButton:true,cancelButtonText:'ยกเลิก',
+    preConfirm: () => {
+      const d=parseInt($('eDelta').value), r=$('eReason').value.trim();
+      if(!r){Swal.showValidationMessage('กรุณาระบุเหตุผล');return false}
+      return{delta:d,reason:r,note:$('eNote').value.trim()};
+    }
+  }).then(async r => {
+    if(!r.isConfirmed) return;
+    const snap = await get(ref(db,`history/${histId}`));
+    if(!snap.exists()) return;
+    const old = snap.val();
+    const diff = r.value.delta - old.delta;
+    await update(ref(db,`history/${histId}`), { delta:r.value.delta, reason:r.value.reason, note:r.value.note, type:r.value.delta>0?'เพิ่มคะแนน':'ตัดคะแนน' });
+    if(diff!==0) {
+      const stuSnap = await get(ref(db,`students/${old.studentId}/score`));
+      const cur = stuSnap.exists()?Number(stuSnap.val()):100;
+      await set(ref(db,`students/${old.studentId}/score`), Math.max(0,Math.min(100,cur+diff)));
+      const stu = APP.students.find(s=>s.id===old.studentId); if(stu) stu.score=Math.max(0,Math.min(100,Number(stu.score)+diff));
+    }
+    toast('success','แก้ไขสำเร็จ'); loadHistory();
+  });
+};
+
+window.deleteHist = async (histId, studentId, delta) => {
+  const r = await Swal.fire({icon:'warning',title:'ยืนยันการลบ',text:'การลบจะคืนคะแนนให้นักเรียนอัตโนมัติ',confirmButtonText:'ลบรายการนี้',confirmButtonColor:'#e53e3e',showCancelButton:true,cancelButtonText:'ยกเลิก'});
+  if(!r.isConfirmed) return;
+  const stuSnap = await get(ref(db,`students/${studentId}/score`));
+  const cur = stuSnap.exists()?Number(stuSnap.val()):100;
+  await Promise.all([
+    remove(ref(db,`history/${histId}`)),
+    set(ref(db,`students/${studentId}/score`), Math.max(0,Math.min(100,cur-delta)))
+  ]);
+  const stu = APP.students.find(s=>s.id===studentId); if(stu) stu.score=Math.max(0,Math.min(100,Number(stu.score)-delta));
+  toast('success','ลบสำเร็จ','คะแนนถูกคืนให้นักเรียนแล้ว'); loadHistory();
+};
+
+// ── REPORT ──
+window.loadReport = async () => {
+  showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
+  await loadStudents();
+  const classMap = {};
+  APP.students.forEach(s => { if(!classMap[s.class]) classMap[s.class]=[]; classMap[s.class].push(s); });
+  const report = Object.keys(classMap).sort().map(cls => {
+    const list=classMap[cls];
+    const avg=Math.round(list.reduce((a,x)=>a+Number(x.score),0)/list.length);
+    return{cls,count:list.length,avg,above80:list.filter(s=>s.score>=80).length,above60:list.filter(s=>s.score>=60&&s.score<80).length,below60:list.filter(s=>s.score<60).length,students:list.sort((a,b)=>a.no-b.no)};
+  });
+
+  let h = `<div class="container">
+  <div class="section-header"><h2 style="margin:0">รายงานสรุปคะแนนพฤติกรรม</h2>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button>
+      <button class="btn" onclick="window.print()"><i class="ti ti-printer"></i> พิมพ์</button>
+    </div>
+  </div>
+  <div class="grid-3" style="margin-bottom:1.25rem">`;
+
+  report.forEach(c => {
+    const color=c.avg>=80?'var(--green-600)':c.avg>=60?'var(--yellow-800)':'var(--red-600)';
+    h+=`<div class="card"><h3>${c.cls} <span class="badge badge-blue">${c.count} คน</span></h3>
+    <div style="font-size:36px;font-weight:700;color:${color};margin-bottom:.25rem">${c.avg}</div>
+    <div class="text-muted" style="margin-bottom:.5rem">คะแนนเฉลี่ย</div>
+    <div class="pbar"><div class="pbar-fill" style="width:${c.avg}%;background:${color}"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:.4rem">
+      <span style="color:var(--green-600)">≥80: ${c.above80}</span>
+      <span style="color:var(--yellow-800)">60-79: ${c.above60}</span>
+      <span style="color:var(--red-600)">&lt;60: ${c.below60}</span>
+    </div></div>`;
+  });
+  h += '</div><div class="card"><h3>รายละเอียดนักเรียน</h3><div class="tab-bar">';
+  report.forEach((c,i) => h+=`<button class="tbtn${i===0?' active':''}" onclick="switchTab('tr_${c.cls.replace('/','_')}',this)">${c.cls}</button>`);
+  h += '</div>';
+  report.forEach((c,i) => {
+    h+=`<div class="tc${i===0?' active':''}" id="tr_${c.cls.replace('/','_')}"><div class="table-wrap"><table>
+    <thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนน</th><th>สถานะ</th></tr></thead><tbody>`;
+    c.students.forEach(s=>h+=`<tr><td>${s.no}</td><td>${s.name}</td><td>${scoreBadge(Number(s.score))}</td><td>${statusBadge(Number(s.score))}</td></tr>`);
+    h+='</tbody></table></div></div>';
+  });
+  h += '</div></div>';
+  showPage(h);
+};
+
+window.switchTab = (id,btn) => {
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('active')); $(id).classList.add('active');
+};
+
+window.exportCSV = async () => {
+  await loadStudents();
+  let csv = '\uFEFF' + 'ห้อง,เลขที่,ชื่อ-นามสกุล,คะแนน,สถานะ\n';
+  APP.students.forEach(s => {
+    const st = s.score>=80?'ดี':s.score>=60?'ปานกลาง':'ต้องดูแล';
+    csv += `${s.class},${s.no},"${s.name}",${s.score},${st}\n`;
+  });
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download='คะแนนพฤติกรรม.csv'; a.click();
+};
+
+// ── STUDENT VIEW ──
+function renderMyScore() {
+  const stu = APP.stuData; if(!stu) return;
+  const score = Number(stu.score);
+  let h = `<div class="container">
+  <div class="stu-hero">
+    <div class="stu-avatar">${stu.name.charAt(0)}</div>
+    <div><div style="font-size:17px;font-weight:700">${stu.name}</div><div style="opacity:.8;font-size:13px">${stu.class}</div></div>
+    <div style="margin-left:auto;text-align:right"><div class="score-hero ${scoreCls(score)}" style="color:#fff">${score}</div><div style="font-size:12px;opacity:.7">/ 100 คะแนน</div></div>
+  </div>
+  <div class="grid-3" style="margin-bottom:1rem">
+    <div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-award"></i></div><div><div class="stat-num ${scoreCls(score)}">${score}</div><div class="stat-label">คะแนนปัจจุบัน</div></div></div>
+    <div class="stat-card"><div class="stat-icon ${score>=80?'si-green':score>=60?'si-yellow':'si-red'}"><i class="ti ti-mood-${score>=80?'happy':score>=60?'smile':'sad'}"></i></div><div><div class="stat-num" style="font-size:18px">${statusText(score)}</div><div class="stat-label">สถานะ</div></div></div>
+    <div class="stat-card" style="background:var(--yellow-100);border-color:var(--yellow-200)"><div class="stat-icon si-yellow"><i class="ti ti-info-circle"></i></div><div><div style="font-size:13px;color:var(--yellow-800);font-weight:500">ภาคเรียนที่ 1/2569</div><div class="stat-label">คะแนนเต็ม 100</div></div></div>
+  </div>
+  <div class="card"><h3>ประวัติคะแนนล่าสุด</h3><div id="myHist"><div class="loading">กำลังโหลด...</div></div></div>
+  </div>`;
+  showPage(h);
+
+  get(ref(db,'history')).then(snap => {
+    const el=$('myHist'); if(!el) return;
+    const hist=[];
+    if(snap.exists()) snap.forEach(c=>{ if(c.val().studentId===stu.id) hist.unshift({id:c.key,...c.val()}); });
+    if(!hist.length){el.innerHTML='<div class="empty">ยังไม่มีประวัติคะแนน</div>';return}
+    el.innerHTML=hist.slice(0,10).map(hh=>`<div class="hist-item">
+      <div class="hist-dot ${hh.delta>0?'dot-plus':'dot-minus'}">${hh.delta>0?'+'+hh.delta:hh.delta}</div>
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${hh.reason}</div>
+      ${hh.note?`<div class="text-muted">${hh.note}</div>`:''}
+      <div class="text-muted">${hh.ts} · ${hh.by}</div></div>
+    </div>`).join('');
+  });
+}
+window.renderMyScore = renderMyScore;
+
+window.loadStudentHistory = async sid => {
+  showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
+  const snap = await get(ref(db,'history'));
+  const hist=[];
+  if(snap.exists()) snap.forEach(c=>{ if(c.val().studentId===sid) hist.unshift({id:c.key,...c.val()}); });
+  let h='<div class="container"><h2>ประวัติคะแนนทั้งหมด</h2><div class="card">';
+  if(!hist.length) h+='<div class="empty">ยังไม่มีประวัติ</div>';
+  else hist.forEach(hh=>{ h+=`<div class="hist-item">
+    <div class="hist-dot ${hh.delta>0?'dot-plus':'dot-minus'}">${hh.delta>0?'+'+hh.delta:hh.delta}</div>
+    <div style="flex:1"><div style="font-size:13px;font-weight:600">${hh.reason}</div>
+    ${hh.note?`<div class="text-muted">${hh.note}</div>`:''}
+    <div class="text-muted">${hh.ts} · ${hh.by}</div></div>
+    <div style="font-weight:700;color:${hh.delta>0?'var(--green-600)':'var(--red-600)'}">${hh.delta>0?'+':''}${hh.delta}</div>
+  </div>`; });
+  h+='</div></div>';
+  showPage(h);
+};
+
+// ── INIT ──
+setupInitialData();
+loadStudents();
+</script>
+</body>
+</html>
