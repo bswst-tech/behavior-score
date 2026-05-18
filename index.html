@@ -198,11 +198,30 @@ firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
 
 // ── CONFIG ──
-var PRESET_PLUS  = [{l:'จิตอาสา',v:10},{l:'เข้าร่วมกิจกรรมโรงเรียน',v:10}];
+var PRESET_VOLUNTEER = [
+  {l:'จิตอาสา',v:5},
+  {l:'จิตอาสา',v:10},
+  {l:'จิตอาสา',v:15},
+  {l:'จิตอาสา',v:20},
+  {l:'เข้าร่วมกิจกรรม',v:10},
+];
+var PRESET_IMPROVE = [
+  {l:'ปรับพฤติกรรม',v:5},
+  {l:'ปรับพฤติกรรม',v:10},
+  {l:'ปรับพฤติกรรม',v:15},
+  {l:'ปรับพฤติกรรม',v:20},
+];
 var PRESET_MINUS = [
-  {l:'มาสาย',v:5},{l:'ขาดเรียน',v:5},{l:'โดดเรียน',v:5},
-  {l:'ทรงผมผิดระเบียบ',v:5},{l:'แต่งกายผิดระเบียบ',v:5},
-  {l:'สูบบุหรี่หรือบุหรี่ไฟฟ้า',v:30},{l:'ทะเลาะวิวาท',v:30}
+  {l:'มาสาย',v:5},
+  {l:'ขาดเรียน',v:5},
+  {l:'โดดเรียน',v:10},
+  {l:'ทรงผมผิดระเบียบ',v:5},
+  {l:'แต่งกายผิดระเบียบ',v:5},
+  {l:'สูบบุหรี่',v:20},
+  {l:'สูบบุหรี่ไฟฟ้า',v:50},
+  {l:'ทะเลาะวิวาท',v:20},
+  {l:'ชู้สาว',v:20},
+  {l:'ฝ่าฝืนกฎระเบียบอื่นๆ',v:5},
 ];
 // ── เพิ่ม/แก้ไขครูได้ที่นี่ ──
 var USERS = {
@@ -534,13 +553,14 @@ function buildScoreForm(sid){
     +'<div class="form-group" id="fSidGroup" style="'+(selCls?'':'display:none')+'"><label>นักเรียน</label>'
     +'<select id="fSid" style="font-family:Sarabun"><option value="">-- เลือกนักเรียน --</option>'+stuOpts+'</select></div>'
     +'<div class="form-group"><label>ประเภท</label>'
-    +'<div style="display:flex;gap:.5rem">'
-    +'<button type="button" id="fBtnPlus" class="btn btn-green" style="flex:1" onclick="setSType(1)"><i class="ti ti-plus"></i> เพิ่มคะแนน</button>'
-    +'<button type="button" id="fBtnMinus" class="btn" style="flex:1;color:var(--red-600);border-color:var(--red-100)" onclick="setSType(-1)"><i class="ti ti-minus"></i> ตัดคะแนน</button>'
+    +'<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
+    +'<button type="button" id="fBtnVol" class="btn btn-green" style="flex:1;min-width:120px" onclick="setSType(\'vol\')"><i class="ti ti-heart"></i> จิตอาสา</button>'
+    +'<button type="button" id="fBtnImp" class="btn" style="flex:1;min-width:120px;color:var(--blue-600);border-color:var(--blue-200)" onclick="setSType(\'imp\')"><i class="ti ti-refresh"></i> ปรับพฤติกรรม</button>'
+    +'<button type="button" id="fBtnMin" class="btn" style="flex:1;min-width:120px;color:var(--red-600);border-color:var(--red-100)" onclick="setSType(\'min\')"><i class="ti ti-minus"></i> ตัดคะแนน</button>'
     +'</div></div>'
     +'<div class="form-group"><label>เหตุผลด่วน</label>'
     +'<div id="fPresets" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">'
-    +PRESET_PLUS.map(function(p){return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (+'+p.v+')</button>';}).join('')
+    +PRESET_VOLUNTEER.map(function(p){return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (+'+p.v+')</button>';}).join('')
     +'</div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">'
     +'<div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน</label><input id="fDelta" type="number" value="1" min="1" max="100" style="font-family:Sarabun"></div>'
@@ -563,21 +583,32 @@ function onScoreClassChange(){
 
 function setSType(t){
   _stype = t;
-  var pp = document.getElementById('fBtnPlus'), pm = document.getElementById('fBtnMinus');
-  if(!pp||!pm) return;
-  if(t===1){
-    pp.className='btn btn-green'; pp.style.flex='1';
-    pm.className='btn'; pm.style.cssText='flex:1;color:var(--red-600);border-color:var(--red-100)';
-    document.getElementById('fPresets').innerHTML = PRESET_PLUS.map(function(p){
-      return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (+'+p.v+')</button>';
-    }).join('');
+  var bv = document.getElementById('fBtnVol');
+  var bi = document.getElementById('fBtnImp');
+  var bm = document.getElementById('fBtnMin');
+  if(!bv||!bi||!bm) return;
+
+  // reset all
+  bv.className='btn'; bv.style.cssText='flex:1;min-width:120px;color:var(--green-600);border-color:var(--green-100)';
+  bi.className='btn'; bi.style.cssText='flex:1;min-width:120px;color:var(--blue-600);border-color:var(--blue-200)';
+  bm.className='btn'; bm.style.cssText='flex:1;min-width:120px;color:var(--red-600);border-color:var(--red-100)';
+
+  var presets = [];
+  if(t==='vol'){
+    bv.className='btn btn-green'; bv.style.cssText='flex:1;min-width:120px';
+    presets = PRESET_VOLUNTEER;
+  } else if(t==='imp'){
+    bi.className='btn btn-blue'; bi.style.cssText='flex:1;min-width:120px';
+    presets = PRESET_IMPROVE;
   } else {
-    pm.className='btn btn-red'; pm.style.flex='1';
-    pp.className='btn'; pp.style.cssText='flex:1';
-    document.getElementById('fPresets').innerHTML = PRESET_MINUS.map(function(p){
-      return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (-'+p.v+')</button>';
-    }).join('');
+    bm.className='btn btn-red'; bm.style.cssText='flex:1;min-width:120px';
+    presets = PRESET_MINUS;
   }
+
+  var sign = t==='min' ? '-' : '+';
+  document.getElementById('fPresets').innerHTML = presets.map(function(p){
+    return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' ('+sign+p.v+')</button>';
+  }).join('');
 }
 
 function pickPreset(l, v){
@@ -586,18 +617,21 @@ function pickPreset(l, v){
 }
 
 function collectForm(){
-  var sid    = document.getElementById('fSid').value;
+  var sidEl  = document.getElementById('fSid');
+  var sid    = sidEl ? sidEl.value : '';
   var delta  = parseInt(document.getElementById('fDelta').value) || 0;
   var reason = document.getElementById('fReason').value.trim();
   var note   = document.getElementById('fNote').value.trim();
   if(!sid)    { Swal.showValidationMessage('กรุณาเลือกนักเรียน'); return false; }
   if(!reason) { Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
   if(delta<=0){ Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน'); return false; }
-  return {sid:sid, delta:_stype*delta, reason:reason, note:note};
+  var actualDelta = _stype==='min' ? -delta : delta;
+  var typeName = _stype==='vol' ? 'จิตอาสา' : _stype==='imp' ? 'ปรับพฤติกรรม' : 'ตัดคะแนน';
+  return {sid:sid, delta:actualDelta, reason:reason, note:note, typeName:typeName};
 }
 
 function showAddScorePanel(){
-  _stype=1;
+  _stype='vol';
   showPage('<div class="container">'
     +'<div class="section-header"><h2 style="margin:0">บันทึกคะแนนพฤติกรรม</h2></div>'
     +'<div class="card">'+buildScoreForm()
@@ -612,7 +646,7 @@ function submitFromPanel(){
 }
 
 function openScoreModal(sid){
-  _stype=1;
+  _stype='vol';
   Swal.fire({
     title:'บันทึกคะแนนพฤติกรรม',
     html: buildScoreForm(sid||''),
@@ -636,7 +670,7 @@ function doRecordScore(val){
   db.ref().update(updates).then(function(){
     return histRef.set({
       studentId:val.sid, name:stu.name, class:stu.class,
-      delta:val.delta, type:val.delta>0?'เพิ่มคะแนน':'ตัดคะแนน',
+      delta:val.delta, type:val.typeName || (val.delta>0?'เพิ่มคะแนน':'ตัดคะแนน'),
       reason:val.reason, note:val.note||'', by:APP.displayName,
       ts:now, scoreAfter:newScore
     });
