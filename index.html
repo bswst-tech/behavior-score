@@ -241,8 +241,8 @@ var PRESET_MINUS = [
 ];
 // ── เพิ่ม/แก้ไขครูได้ที่นี่ ──
 var USERS = {
-  teacher1: {password:'1234', role:'teacher', displayName:'ครูศุภลักษณ์'},
-  teacher2: {password:'1234', role:'teacher', displayName:'ครูวัชรพล'},
+  teacher1: {password:'1234', role:'teacher', displayName:'ครูสุภลักษณ์'},
+  teacher2: {password:'1234', role:'teacher', displayName:'ครูสมศรี'},
   admin:    {password:'admin2569', role:'admin', displayName:'ผู้ดูแลระบบ'},
 };
 
@@ -942,63 +942,6 @@ function deleteHist(histId, studentId, delta, type){
     }).catch(function(e){toast('error','เกิดข้อผิดพลาด',e.message);});
   });
 }
-    title:'แก้ไขรายการ',
-    html:'<div style="text-align:left">'
-      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน (+ได้รับ / -ถูกหัก)</label>'
-      +'<input id="eDelta" class="swal2-input" type="number" value="'+delta+'" style="font-family:Sarabun;width:100%;margin:0 0 10px">'
-      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label>'
-      +'<input id="eReason" class="swal2-input" value="'+reason+'" style="font-family:Sarabun;width:100%;margin:0 0 10px">'
-      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">หมายเหตุ</label>'
-      +'<textarea id="eNote" class="swal2-textarea" style="font-family:Sarabun;width:100%;margin:0">'+note+'</textarea>'
-      +'</div>',
-    confirmButtonText:'บันทึกการแก้ไข', confirmButtonColor:'#2980b9',
-    showCancelButton:true, cancelButtonText:'ยกเลิก',
-    preConfirm:function(){
-      var d = parseInt(document.getElementById('eDelta').value);
-      var r = document.getElementById('eReason').value.trim();
-      if(!r){ Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
-      return {delta:d, reason:r, note:document.getElementById('eNote').value.trim()};
-    }
-  }).then(function(r){
-    if(!r.isConfirmed) return;
-    db.ref('history/'+histId).once('value').then(function(snap){
-      if(!snap.exists()) return;
-      var old  = snap.val();
-      var diff = r.value.delta - old.delta;
-      db.ref('history/'+histId).update({delta:r.value.delta, reason:r.value.reason, note:r.value.note, type:r.value.delta>0?'เพิ่มคะแนน':'ตัดคะแนน'}).then(function(){
-        if(diff!==0){
-          db.ref('students/'+old.studentId+'/score').once('value').then(function(s){
-            var cur = s.exists() ? Number(s.val()) : 100;
-            db.ref('students/'+old.studentId+'/score').set(Math.max(0,Math.min(100,cur+diff)));
-            var stu = APP.students.find(function(x){return x.id===old.studentId;});
-            if(stu) stu.score = Math.max(0,Math.min(100,Number(stu.score)+diff));
-          });
-        }
-        toast('success','แก้ไขสำเร็จ',''); loadHistory();
-      });
-    });
-  });
-}
-
-function deleteHist(histId, studentId, delta){
-  Swal.fire({
-    icon:'warning', title:'ยืนยันการลบ', text:'การลบจะคืนคะแนนให้นักเรียนอัตโนมัติ',
-    confirmButtonText:'ลบรายการนี้', confirmButtonColor:'#e53e3e',
-    showCancelButton:true, cancelButtonText:'ยกเลิก'
-  }).then(function(r){
-    if(!r.isConfirmed) return;
-    db.ref('students/'+studentId+'/score').once('value').then(function(s){
-      var cur = s.exists() ? Number(s.val()) : 100;
-      db.ref('students/'+studentId+'/score').set(Math.max(0,Math.min(100,cur-delta)));
-      var stu = APP.students.find(function(x){return x.id===studentId;});
-      if(stu) stu.score = Math.max(0,Math.min(100,Number(stu.score)-delta));
-      return db.ref('history/'+histId).remove();
-    }).then(function(){
-      toast('success','ลบสำเร็จ','คะแนนถูกคืนให้นักเรียนแล้ว'); loadHistory();
-    }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
-  });
-}
-
 // ── REPORT ──
 function loadReport(){
   showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
