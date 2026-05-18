@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 :root{
   --blue-50:#f0f8fc;--blue-100:#cbe8f2;--blue-200:#9dd1e6;
@@ -70,11 +72,10 @@ tbody tr:hover{background:var(--blue-50)}
 td{padding:9px 12px;vertical-align:middle}
 .td-actions{display:flex;gap:6px;justify-content:flex-end}
 .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
-.badge-blue{background:var(--blue-100);color:var(--blue-800)}
 .badge-green{background:var(--green-100);color:var(--green-600)}
 .badge-red{background:var(--red-100);color:var(--red-600)}
 .badge-yellow{background:var(--yellow-100);color:var(--yellow-800)}
-.badge-gray{background:var(--gray-100);color:var(--gray-600)}
+.badge-blue{background:var(--blue-100);color:var(--blue-800)}
 .hist-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--blue-50)}
 .hist-item:last-child{border-bottom:none}
 .hist-dot{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
@@ -115,6 +116,12 @@ h3{font-size:15px;font-weight:600;margin-bottom:.6rem}
 .img-preview{max-width:100%;max-height:180px;border-radius:8px;border:2px solid var(--blue-100);margin-top:.5rem;display:none}
 .swal2-popup{font-family:'Sarabun',sans-serif!important;border-radius:14px!important}
 .swal2-confirm,.swal2-cancel,.swal2-deny{border-radius:var(--radius)!important}
+/* class group cards */
+.class-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1rem;margin-bottom:1rem}
+.class-card{background:#fff;border:1.5px solid var(--blue-100);border-radius:var(--radius);padding:1rem;text-align:center;cursor:pointer;transition:.2s;box-shadow:var(--shadow)}
+.class-card:hover{background:var(--blue-100);border-color:var(--blue-400);transform:translateY(-2px)}
+.class-card .class-name{font-size:16px;font-weight:700;color:var(--blue-800);margin-bottom:4px}
+.class-card .class-count{font-size:12px;color:var(--gray-400)}
 </style>
 </head>
 <body>
@@ -131,15 +138,29 @@ h3{font-size:15px;font-weight:600;margin-bottom:.6rem}
       <button class="role-tab active" id="roleTeacher"><i class="ti ti-school" style="font-size:15px"></i> ครู</button>
       <button class="role-tab" id="roleStudent"><i class="ti ti-user" style="font-size:15px"></i> นักเรียน</button>
     </div>
+    <!-- ครู -->
     <div id="teacherArea">
       <div class="form-group"><label>ชื่อผู้ใช้</label><input id="loginUser" type="text" placeholder="username"></div>
       <div class="form-group"><label>รหัสผ่าน</label><input id="loginPass" type="password" placeholder="password"></div>
       <button class="btn btn-blue" style="width:100%" id="loginBtn">เข้าสู่ระบบ</button>
     </div>
+    <!-- นักเรียน: เลือกชั้น → เลือกชื่อ -->
     <div id="studentArea" style="display:none">
-      <div style="background:var(--yellow-100);border:1.5px solid var(--yellow-200);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;color:var(--yellow-800);margin-bottom:1rem"><i class="ti ti-info-circle"></i> กรอกชื่อ-นามสกุลให้ตรงกับทะเบียน</div>
-      <div class="form-group"><label>ห้องเรียน</label><select id="stuClass"><option value="">-- เลือกห้อง --</option></select></div>
-      <div class="form-group"><label>ชื่อ-นามสกุล</label><input id="stuName" type="text" placeholder="เช่น กนกพร รักเรียน"></div>
+      <div style="background:var(--yellow-100);border:1.5px solid var(--yellow-200);border-radius:var(--radius);padding:.75rem 1rem;font-size:13px;color:var(--yellow-800);margin-bottom:1rem">
+        <i class="ti ti-info-circle"></i> เลือกชั้นเรียน แล้วเลือกชื่อของคุณ
+      </div>
+      <div class="form-group">
+        <label>ชั้นเรียน</label>
+        <select id="stuClass">
+          <option value="">-- เลือกชั้นเรียน --</option>
+        </select>
+      </div>
+      <div class="form-group" id="stuNameGroup" style="display:none">
+        <label>ชื่อ-นามสกุล</label>
+        <select id="stuNameSelect">
+          <option value="">-- เลือกชื่อ --</option>
+        </select>
+      </div>
       <button class="btn btn-blue" style="width:100%" id="stuBtn">เข้าสู่ระบบ</button>
     </div>
   </div>
@@ -148,22 +169,21 @@ h3{font-size:15px;font-weight:600;margin-bottom:.6rem}
 <!-- MAIN APP -->
 <div id="mainApp" style="display:none">
   <div class="topbar">
-    <div class="topbar-brand"><div class="logo"><i class="ti ti-star-filled" style="font-size:16px"></i></div><span>ระบบคะแนนพฤติกรรม</span></div>
+    <div class="topbar-brand">
+      <div class="logo"><i class="ti ti-star-filled" style="font-size:16px"></i></div>
+      <span>ระบบคะแนนพฤติกรรม</span>
+    </div>
     <div style="display:flex;align-items:center;gap:10px">
       <span class="chip-user" id="topUser"></span>
-      <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border-color:transparent" onclick="doLogout()"><i class="ti ti-logout"></i> ออก</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border-color:transparent" id="logoutBtn"><i class="ti ti-logout"></i> ออก</button>
     </div>
   </div>
   <div class="nav-wrap" id="mainNav"></div>
   <div id="pageArea"></div>
 </div>
 
-<!-- FIREBASE SDK -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-import { getDatabase, ref, set, get, push, update, remove, onValue, child }
-  from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
-
+<script>
+// ── FIREBASE CONFIG ──
 const firebaseConfig = {
   apiKey: "AIzaSyBrcxjvO4sit1iod6tT8QA5genjxjaKAMk",
   authDomain: "behavior-score-36b68.firebaseapp.com",
@@ -173,86 +193,113 @@ const firebaseConfig = {
   messagingSenderId: "967348590390",
   appId: "1:967348590390:web:c0f0135eb9b3f76bda0597"
 };
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
 
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
-
-// ── PRESETS ──
-const PRESET_PLUS  = [{l:'จิตอาสา',v:10},{l:'เข้าร่วมกิจกรรมโรงเรียน',v:10}];
-const PRESET_MINUS = [
+// ── CONFIG ──
+var PRESET_PLUS  = [{l:'จิตอาสา',v:10},{l:'เข้าร่วมกิจกรรมโรงเรียน',v:10}];
+var PRESET_MINUS = [
   {l:'มาสาย',v:5},{l:'ขาดเรียน',v:5},{l:'โดดเรียน',v:5},
   {l:'ทรงผมผิดระเบียบ',v:5},{l:'แต่งกายผิดระเบียบ',v:5},
   {l:'สูบบุหรี่หรือบุหรี่ไฟฟ้า',v:30},{l:'ทะเลาะวิวาท',v:30}
 ];
-
-// ── USERS (hardcoded — แก้ตรงนี้เพื่อเพิ่มครู) ──
-const USERS = {
-  teacher1 : { password:'1234',      role:'teacher', displayName:'ครูสุภลักษณ์' },
-  teacher2 : { password:'1234',      role:'teacher', displayName:'ครูสมศรี' },
-  admin    : { password:'admin2569', role:'admin',   displayName:'ผู้ดูแลระบบ' },
+// ── เพิ่ม/แก้ไขครูได้ที่นี่ ──
+var USERS = {
+  teacher1: {password:'1234', role:'teacher', displayName:'ครูสุภลักษณ์'},
+  teacher2: {password:'1234', role:'teacher', displayName:'ครูสมศรี'},
+  admin:    {password:'admin2569', role:'admin', displayName:'ผู้ดูแลระบบ'},
 };
 
 // ── STATE ──
-let APP = { role:'', user:'', displayName:'', students:[], classes:[], stuData:null };
-let _stype = 1, _imgB64 = '', _imgMime = '', _imgName = '';
+var APP = {role:'', user:'', displayName:'', students:[], classes:[], stuData:null};
+var _stype = 1, _imgB64 = '', _imgMime = '', _imgName = '';
 
 // ── HELPERS ──
-const $ = id => document.getElementById(id);
-const makeId = (no, cls) => String(no).padStart(3,'0') + '_' + cls.replace(/[\/\s]/g,'');
-const scoreCls = s => s>=80?'score-good':s>=60?'score-mid':'score-low';
-const scoreBadge = s => {
-  const c = s>=80?'badge-green':s>=60?'badge-yellow':'badge-red';
-  return `<span class="badge ${c}">${s}</span>`;
-};
-const statusBadge = s => s>=80?'<span class="badge badge-green">ดี</span>':s>=60?'<span class="badge badge-yellow">ปานกลาง</span>':'<span class="badge badge-red">ต้องดูแล</span>';
-const statusText = s => s>=80?'ดี':s>=60?'ปานกลาง':'ต้องดูแล';
-const showPage = h => $('pageArea').innerHTML = h;
-const toast = (icon,title,text='') => Swal.fire({icon,title,text,toast:true,position:'top-end',showConfirmButton:false,timer:3000,timerProgressBar:true});
-const fmtDate = () => new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-
-// ── SETUP INITIAL DATA (รันครั้งแรกเท่านั้น) ──
-async function setupInitialData() {
-  const snap = await get(ref(db, 'setup_done'));
-  if (snap.exists()) return;
-  await set(ref(db, 'setup_done'), true);
+function $(id){ return document.getElementById(id); }
+function makeId(no, cls){ return String(no).padStart(3,'0') + '_' + cls.replace(/[\/\s]/g,''); }
+function scoreCls(s){ return s>=80?'score-good':s>=60?'score-mid':'score-low'; }
+function scoreBadge(s){
+  var c = s>=80?'badge-green':s>=60?'badge-yellow':'badge-red';
+  return '<span class="badge '+c+'">'+s+'</span>';
+}
+function statusBadge(s){
+  if(s>=80) return '<span class="badge badge-green">ดี</span>';
+  if(s>=60) return '<span class="badge badge-yellow">ปานกลาง</span>';
+  return '<span class="badge badge-red">ต้องดูแล</span>';
+}
+function statusText(s){ return s>=80?'ดี':s>=60?'ปานกลาง':'ต้องดูแล'; }
+function showPage(h){ $('pageArea').innerHTML = h; }
+function toast(icon, title, text){
+  Swal.fire({icon:icon, title:title, text:text||'', toast:true, position:'top-end', showConfirmButton:false, timer:3000, timerProgressBar:true});
+}
+function fmtDate(){
+  return new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 }
 
-// ── LOAD STUDENTS FROM FIREBASE ──
-async function loadStudents() {
-  const snap = await get(ref(db, 'students'));
-  const students = [];
-  if (snap.exists()) {
-    snap.forEach(child => {
-      students.push({ id: child.key, ...child.val() });
-    });
-  }
-  APP.students = students.sort((a,b) => Number(a.no) - Number(b.no));
-  APP.classes  = [...new Set(students.map(s => s.class))].sort();
-  // โหลดห้องเรียนลง select นักเรียน
-  const sel = $('stuClass');
-  if (sel) {
-    sel.innerHTML = '<option value="">-- เลือกห้อง --</option>';
-    APP.classes.forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
-  }
-  return APP.students;
+// ── LOAD STUDENTS ──
+function loadStudents(callback){
+  db.ref('students').once('value').then(function(snap){
+    var students = [];
+    if(snap.exists()){
+      snap.forEach(function(child){
+        var d = child.val();
+        students.push({id:child.key, no:d.no, name:d.name, class:d.class, score:d.score||100});
+      });
+    }
+    students.sort(function(a,b){ return Number(a.no)-Number(b.no); });
+    APP.students = students;
+    APP.classes  = [...new Set(students.map(function(s){return s.class;}))].sort();
+    if(callback) callback(students);
+  });
 }
 
 // ── LOGIN ──
-let _loginRole = 'teacher';
-function pickRole(r) {
+var _loginRole = 'teacher';
+
+function pickRole(r){
   _loginRole = r;
   $('roleTeacher').classList.toggle('active', r==='teacher');
   $('roleStudent').classList.toggle('active', r==='student');
   $('teacherArea').style.display = r==='teacher' ? '' : 'none';
   $('studentArea').style.display = r==='student' ? '' : 'none';
+  if(r==='student') populateClassSelect();
 }
 
-function doLogin() {
-  const u = $('loginUser').value.trim();
-  const p = $('loginPass').value.trim();
-  if (!u||!p) { toast('warning','กรุณากรอกข้อมูลให้ครบ'); return; }
-  const usr = USERS[u];
-  if (!usr || usr.password !== p) {
+function populateClassSelect(){
+  loadStudents(function(students){
+    var classes = [...new Set(students.map(function(s){return s.class;}))].sort();
+    var sel = $('stuClass');
+    sel.innerHTML = '<option value="">-- เลือกชั้นเรียน --</option>';
+    classes.forEach(function(c){
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      sel.appendChild(o);
+    });
+  });
+}
+
+// เมื่อเลือกชั้น → โหลดรายชื่อนักเรียนในชั้นนั้น
+function onClassChange(){
+  var cls = $('stuClass').value;
+  var nameGroup = $('stuNameGroup');
+  var nameSel   = $('stuNameSelect');
+  if(!cls){ nameGroup.style.display='none'; return; }
+  var list = APP.students.filter(function(s){return s.class===cls;});
+  nameSel.innerHTML = '<option value="">-- เลือกชื่อ --</option>';
+  list.forEach(function(s){
+    var o = document.createElement('option');
+    o.value = s.id; o.textContent = s.no + '. ' + s.name;
+    nameSel.appendChild(o);
+  });
+  nameGroup.style.display = '';
+}
+
+function doLogin(){
+  var u = $('loginUser').value.trim();
+  var p = $('loginPass').value.trim();
+  if(!u||!p){ toast('warning','กรุณากรอกข้อมูลให้ครบ'); return; }
+  var usr = USERS[u];
+  if(!usr || usr.password !== p){
     Swal.fire({icon:'error',title:'เข้าสู่ระบบไม่สำเร็จ',text:'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',confirmButtonColor:'#2980b9'});
     return;
   }
@@ -260,516 +307,588 @@ function doLogin() {
   startApp();
 }
 
-async function doStudentLogin() {
-  const cls  = $('stuClass').value;
-  const name = $('stuName').value.trim();
-  if (!cls||!name) { toast('warning','กรุณาเลือกห้องและกรอกชื่อ'); return; }
-  $('stuBtn').disabled = true; $('stuBtn').textContent = 'กำลังตรวจสอบ...';
-  await loadStudents();
-  $('stuBtn').disabled = false; $('stuBtn').textContent = 'เข้าสู่ระบบ';
-  const stu = APP.students.find(s => s.class===cls && s.name.trim()===name);
-  if (!stu) { Swal.fire({icon:'error',title:'ไม่พบข้อมูล',text:'ไม่พบชื่อนักเรียนในระบบ กรุณาตรวจสอบการสะกดชื่อ',confirmButtonColor:'#2980b9'}); return; }
+function doStudentLogin(){
+  var sid = $('stuNameSelect').value;
+  if(!sid){ toast('warning','กรุณาเลือกชื่อของคุณ'); return; }
+  var stu = APP.students.find(function(s){return s.id===sid;});
+  if(!stu){ toast('error','ไม่พบข้อมูลนักเรียน'); return; }
   APP.user = stu.id; APP.displayName = stu.name; APP.role = 'student'; APP.stuData = stu;
   startApp();
 }
 
-function doLogout() {
-  APP = { role:'', user:'', displayName:'', students:[], classes:[], stuData:null };
+function doLogout(){
+  APP = {role:'', user:'', displayName:'', students:[], classes:[], stuData:null};
   $('mainApp').style.display = 'none';
   $('loginScreen').style.display = 'flex';
 }
 
 // ── START APP ──
-async function startApp() {
+function startApp(){
   $('loginScreen').style.display = 'none';
   $('mainApp').style.display = 'block';
   $('topUser').textContent = APP.displayName;
-  if (APP.role==='teacher'||APP.role==='admin') {
+  if(APP.role==='teacher'||APP.role==='admin'){
     $('mainNav').innerHTML = [
-      ['dash','ภาพรวม','ti-dashboard'],['students','นักเรียน','ti-users'],
-      ['add-score','บันทึกคะแนน','ti-edit'],['history','ประวัติ','ti-history'],['report','รายงาน','ti-chart-bar']
-    ].map((t,i) => `<button class="nav-btn${i===0?' active':''}" id="nav_${t[0]}" onclick="navTo('${t[0]}',this)"><i class="ti ${t[2]}"></i> ${t[1]}</button>`).join('');
-    await loadStudents();
-    renderDashboard();
+      ['dash','ภาพรวม','ti-dashboard'],
+      ['students','นักเรียน','ti-users'],
+      ['add-score','บันทึกคะแนน','ti-edit'],
+      ['history','ประวัติ','ti-history'],
+      ['report','รายงาน','ti-chart-bar']
+    ].map(function(t,i){
+      return '<button class="nav-btn'+(i===0?' active':'')+'" onclick="navTo(\''+t[0]+'\',this)"><i class="ti '+t[2]+'"></i> '+t[1]+'</button>';
+    }).join('');
+    loadStudents(function(){ renderDashboard(); });
   } else {
     $('mainNav').innerHTML = [
-      ['my-score','คะแนนของฉัน','ti-star'],['my-history','ประวัติคะแนน','ti-history']
-    ].map((t,i) => `<button class="nav-btn${i===0?' active':''}" id="nav_${t[0]}" onclick="navTo('${t[0]}',this)"><i class="ti ${t[2]}"></i> ${t[1]}</button>`).join('');
+      ['my-score','คะแนนของฉัน','ti-star'],
+      ['my-history','ประวัติคะแนน','ti-history']
+    ].map(function(t,i){
+      return '<button class="nav-btn'+(i===0?' active':'')+'" onclick="navTo(\''+t[0]+'\',this)"><i class="ti '+t[2]+'"></i> '+t[1]+'</button>';
+    }).join('');
     renderMyScore();
   }
 }
 
-function navTo(page, btn) {
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+function navTo(page, btn){
+  document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.remove('active');});
   if(btn) btn.classList.add('active');
-  const map = {
-    'dash': renderDashboard, 'students': () => renderStudents(''),
-    'add-score': showAddScorePanel, 'history': loadHistory,
-    'report': loadReport, 'my-score': renderMyScore,
-    'my-history': () => loadStudentHistory(APP.user)
+  var map = {
+    'dash': renderDashboard,
+    'students': function(){ renderClassGroups(); },
+    'add-score': showAddScorePanel,
+    'history': loadHistory,
+    'report': loadReport,
+    'my-score': renderMyScore,
+    'my-history': function(){ loadStudentHistory(APP.user); }
   };
   if(map[page]) map[page]();
 }
-window.navTo = navTo;
 
 // ── DASHBOARD ──
-async function renderDashboard() {
+function renderDashboard(){
   showPage('<div class="container"><div class="loading"><i class="ti ti-loader"></i> กำลังโหลด...</div></div>');
-  await loadStudents();
-  const histSnap = await get(ref(db,'history'));
-  const history = [];
-  if (histSnap.exists()) histSnap.forEach(c => history.unshift({id:c.key,...c.val()}));
+  loadStudents(function(students){
+    db.ref('history').once('value').then(function(snap){
+      var history = [];
+      if(snap.exists()) snap.forEach(function(c){ history.unshift({id:c.key, ...c.val()}); });
 
-  const s = APP.students;
-  const total = s.length;
-  const avg = total ? Math.round(s.reduce((a,x)=>a+Number(x.score),0)/total) : 0;
-  const above80 = s.filter(x=>x.score>=80).length;
-  const below60 = s.filter(x=>x.score<60).length;
+      var total   = students.length;
+      var avg     = total ? Math.round(students.reduce(function(a,s){return a+Number(s.score);},0)/total) : 0;
+      var above80 = students.filter(function(s){return s.score>=80;}).length;
+      var below60 = students.filter(function(s){return s.score<60;}).length;
 
-  let h = `<div class="container">
-  <div class="section-header">
-    <div><h2 style="margin:0">ภาพรวมคะแนนพฤติกรรม</h2><div class="text-muted">ภาคเรียนที่ 1 ปีการศึกษา 2569</div></div>
-    <button class="btn btn-blue" onclick="showAddScorePanel()"><i class="ti ti-plus"></i> บันทึกคะแนน</button>
-  </div>
-  <div class="grid-4" style="margin-bottom:1.25rem">
-    <div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-users"></i></div><div><div class="stat-num">${total}</div><div class="stat-label">นักเรียนทั้งหมด</div></div></div>
-    <div class="stat-card"><div class="stat-icon si-yellow"><i class="ti ti-star"></i></div><div><div class="stat-num">${avg}</div><div class="stat-label">คะแนนเฉลี่ย</div></div></div>
-    <div class="stat-card"><div class="stat-icon si-green"><i class="ti ti-thumb-up"></i></div><div><div class="stat-num">${above80}</div><div class="stat-label">คะแนน ≥ 80</div></div></div>
-    <div class="stat-card"><div class="stat-icon si-red"><i class="ti ti-alert-circle"></i></div><div><div class="stat-num">${below60}</div><div class="stat-label">คะแนน &lt; 60</div></div></div>
-  </div>
-  <div class="grid-2">`;
+      var h = '<div class="container">';
+      h += '<div class="section-header"><div><h2 style="margin:0">ภาพรวมคะแนนพฤติกรรม</h2><div class="text-muted">ภาคเรียนที่ 1 ปีการศึกษา 2569</div></div>';
+      h += '<button class="btn btn-blue" onclick="showAddScorePanel()"><i class="ti ti-plus"></i> บันทึกคะแนน</button></div>';
+      h += '<div class="grid-4" style="margin-bottom:1.25rem">';
+      h += '<div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-users"></i></div><div><div class="stat-num">'+total+'</div><div class="stat-label">นักเรียนทั้งหมด</div></div></div>';
+      h += '<div class="stat-card"><div class="stat-icon si-yellow"><i class="ti ti-star"></i></div><div><div class="stat-num">'+avg+'</div><div class="stat-label">คะแนนเฉลี่ย</div></div></div>';
+      h += '<div class="stat-card"><div class="stat-icon si-green"><i class="ti ti-thumb-up"></i></div><div><div class="stat-num">'+above80+'</div><div class="stat-label">คะแนน ≥ 80</div></div></div>';
+      h += '<div class="stat-card"><div class="stat-icon si-red"><i class="ti ti-alert-circle"></i></div><div><div class="stat-num">'+below60+'</div><div class="stat-label">คะแนน &lt; 60</div></div></div>';
+      h += '</div><div class="grid-2">';
 
-  const watch = s.filter(x=>x.score<60);
-  h += `<div class="card"><h3>นักเรียนที่ต้องดูแล <span class="badge badge-red">${watch.length}</span></h3>`;
-  if (!watch.length) h += '<div class="empty"><i class="ti ti-mood-happy" style="font-size:28px;color:var(--blue-200)"></i><br>ไม่มีนักเรียนคะแนนต่ำ</div>';
-  else watch.forEach(st => {
-    h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--blue-50)">
-      <div><div style="font-weight:500;font-size:14px">${st.name}</div><div class="text-muted">${st.class}</div></div>
-      <div style="display:flex;align-items:center;gap:8px">${scoreBadge(st.score)}<button class="btn btn-sm btn-blue" onclick="openScoreModal('${st.id}')"><i class="ti ti-plus"></i></button></div>
-    </div>`;
+      // นักเรียนต้องดูแล
+      var watch = students.filter(function(s){return s.score<60;});
+      h += '<div class="card"><h3>นักเรียนที่ต้องดูแล <span class="badge badge-red">'+watch.length+'</span></h3>';
+      if(!watch.length) h += '<div class="empty"><i class="ti ti-mood-happy" style="font-size:28px;color:var(--blue-200)"></i><br>ไม่มีนักเรียนคะแนนต่ำ</div>';
+      else watch.forEach(function(st){
+        h += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--blue-50)">';
+        h += '<div><div style="font-weight:500;font-size:14px">'+st.name+'</div><div class="text-muted">'+st.class+'</div></div>';
+        h += '<div style="display:flex;align-items:center;gap:8px">'+scoreBadge(Number(st.score))+'<button class="btn btn-sm btn-blue" onclick="openScoreModal(\''+st.id+'\')"><i class="ti ti-plus"></i></button></div></div>';
+      });
+      h += '</div>';
+
+      // กิจกรรมล่าสุด
+      h += '<div class="card"><h3>กิจกรรมล่าสุด</h3>';
+      if(!history.length) h += '<div class="empty">ยังไม่มีการบันทึก</div>';
+      else history.slice(0,7).forEach(function(hh){
+        h += '<div class="hist-item"><div class="hist-dot '+(hh.delta>0?'dot-plus':'dot-minus')+'">'+(hh.delta>0?'+'+hh.delta:hh.delta)+'</div>';
+        h += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+hh.name+'</div>';
+        h += '<div class="text-muted">'+hh.reason+(hh.note?' · '+hh.note:'')+'</div></div>';
+        h += '<div class="text-muted" style="white-space:nowrap;font-size:11px">'+((hh.ts||'').split(' ')[1]||'')+'</div></div>';
+      });
+      h += '</div></div></div>';
+      showPage(h);
+    });
   });
-  h += '</div>';
-
-  h += `<div class="card"><h3>กิจกรรมล่าสุด</h3>`;
-  if (!history.length) h += '<div class="empty">ยังไม่มีการบันทึก</div>';
-  else history.slice(0,7).forEach(hh => {
-    h += `<div class="hist-item">
-      <div class="hist-dot ${hh.delta>0?'dot-plus':'dot-minus'}">${hh.delta>0?'+'+hh.delta:hh.delta}</div>
-      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${hh.name}</div>
-      <div class="text-muted">${hh.reason}${hh.note?' · '+hh.note:''}</div></div>
-      <div class="text-muted" style="white-space:nowrap;font-size:11px">${(hh.ts||'').split(' ')[1]||''}</div>
-    </div>`;
-  });
-  h += '</div></div></div>';
-  showPage(h);
 }
-window.renderDashboard = renderDashboard;
 
-// ── STUDENTS ──
-function renderStudents(fc) {
-  const list = fc ? APP.students.filter(s=>s.class===fc) : APP.students;
-  let h = `<div class="container">
-  <div class="section-header"><h2 style="margin:0">รายชื่อนักเรียน</h2>
-    <div style="display:flex;gap:.5rem">
-      <button class="btn" onclick="openAddStudentModal()"><i class="ti ti-user-plus"></i> เพิ่มนักเรียน</button>
-      <button class="btn btn-blue" onclick="openScoreModal()"><i class="ti ti-plus"></i> บันทึกคะแนน</button>
-    </div>
-  </div>
-  <div class="chips">
-    <button class="chip${!fc?' active':''}" onclick="renderStudents('')">ทั้งหมด</button>
-    ${APP.classes.map(c=>`<button class="chip${fc===c?' active':''}" onclick="renderStudents('${c}')">${c}</button>`).join('')}
-  </div>
-  <div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="stuSearch" placeholder="ค้นหาชื่อนักเรียน..." oninput="filterStu()"></div>
-  <div class="card" style="padding:0"><div class="table-wrap"><table id="stuTbl">
-    <thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>ห้อง</th><th>คะแนน</th><th>สถานะ</th><th style="text-align:right">จัดการ</th></tr></thead>
-    <tbody>`;
-  list.forEach(s => {
-    h += `<tr><td>${s.no}</td><td style="font-weight:500">${s.name}</td><td>${s.class}</td>
-    <td>${scoreBadge(Number(s.score))}</td><td>${statusBadge(Number(s.score))}</td>
-    <td><div class="td-actions">
-      <button class="btn btn-sm btn-blue" onclick="openScoreModal('${s.id}')"><i class="ti ti-plus"></i></button>
-      <button class="btn btn-sm" onclick="openStudentDetail('${s.id}')"><i class="ti ti-eye"></i></button>
-    </div></td></tr>`;
+// ── STUDENTS — แสดงกลุ่มชั้นเรียนก่อน ──
+function renderClassGroups(){
+  loadStudents(function(students){
+    var classMap = {};
+    students.forEach(function(s){
+      if(!classMap[s.class]) classMap[s.class]=[];
+      classMap[s.class].push(s);
+    });
+    var classes = Object.keys(classMap).sort();
+
+    var h = '<div class="container">';
+    h += '<div class="section-header"><h2 style="margin:0">นักเรียนแยกตามชั้น</h2>';
+    h += '<button class="btn btn-blue" onclick="openAddStudentModal()"><i class="ti ti-user-plus"></i> เพิ่มนักเรียน</button></div>';
+    h += '<div class="class-grid">';
+    classes.forEach(function(cls){
+      var count = classMap[cls].length;
+      var avg   = Math.round(classMap[cls].reduce(function(a,s){return a+Number(s.score);},0)/count);
+      h += '<div class="class-card" onclick="renderStudentsByClass(\''+cls+'\')"><div class="class-name">'+cls+'</div>';
+      h += '<div class="class-count">'+count+' คน · เฉลี่ย '+avg+'</div></div>';
+    });
+    h += '</div></div>';
+    showPage(h);
+  });
+}
+
+// แสดงรายชื่อนักเรียนในชั้นที่เลือก
+function renderStudentsByClass(cls){
+  var list = APP.students.filter(function(s){return s.class===cls;});
+  var h = '<div class="container">';
+  h += '<div class="section-header">';
+  h += '<div style="display:flex;align-items:center;gap:.75rem"><button class="btn btn-sm" onclick="renderClassGroups()"><i class="ti ti-arrow-left"></i> กลับ</button><h2 style="margin:0">ชั้น '+cls+'</h2></div>';
+  h += '<div style="display:flex;gap:.5rem"><button class="btn" onclick="openAddStudentModal()"><i class="ti ti-user-plus"></i> เพิ่มนักเรียน</button>';
+  h += '<button class="btn btn-blue" onclick="openScoreModal()"><i class="ti ti-plus"></i> บันทึกคะแนน</button></div></div>';
+  h += '<div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="stuSearch" placeholder="ค้นหาชื่อนักเรียน..." oninput="filterStu()"></div>';
+  h += '<div class="card" style="padding:0"><div class="table-wrap"><table id="stuTbl">';
+  h += '<thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนน</th><th>สถานะ</th><th style="text-align:right">จัดการ</th></tr></thead><tbody>';
+  list.forEach(function(s){
+    h += '<tr><td>'+s.no+'</td><td style="font-weight:500">'+s.name+'</td>';
+    h += '<td>'+scoreBadge(Number(s.score))+'</td><td>'+statusBadge(Number(s.score))+'</td>';
+    h += '<td><div class="td-actions"><button class="btn btn-sm btn-blue" onclick="openScoreModal(\''+s.id+'\')"><i class="ti ti-plus"></i></button>';
+    h += '<button class="btn btn-sm" onclick="openStudentDetail(\''+s.id+'\')"><i class="ti ti-eye"></i></button></div></td></tr>';
   });
   h += '</tbody></table></div></div></div>';
   showPage(h);
 }
-window.renderStudents = renderStudents;
-window.filterStu = () => {
-  const q = $('stuSearch').value.toLowerCase();
-  document.querySelectorAll('#stuTbl tbody tr').forEach(r => r.style.display = r.textContent.toLowerCase().includes(q)?'':'none');
-};
 
-// ── ADD STUDENT ──
-window.openAddStudentModal = () => {
+function filterStu(){
+  var q = $('stuSearch').value.toLowerCase();
+  document.querySelectorAll('#stuTbl tbody tr').forEach(function(r){
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+// ── ADD STUDENT MODAL ──
+function openAddStudentModal(){
+  var clsOpts = APP.classes.map(function(c){return '<option>'+c+'</option>';}).join('');
   Swal.fire({
     title:'เพิ่มนักเรียนใหม่',
-    html:`<div style="text-align:left">
-      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เลขที่</label>
-      <input id="sNo" class="swal2-input" type="number" min="1" style="font-family:Sarabun;margin:0 0 10px;width:100%">
-      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">ชื่อ-นามสกุล</label>
-      <input id="sName" class="swal2-input" placeholder="ชื่อ นามสกุล" style="font-family:Sarabun;margin:0 0 10px;width:100%">
-      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">ห้อง</label>
-      <input id="sCls" class="swal2-input" placeholder="เช่น ม.2/1" style="font-family:Sarabun;margin:0;width:100%">
-    </div>`,
-    confirmButtonText:'เพิ่มนักเรียน',confirmButtonColor:'#2980b9',showCancelButton:true,cancelButtonText:'ยกเลิก',
-    preConfirm: () => {
-      const no=$('sNo').value.trim(), name=$('sName').value.trim(), cls=$('sCls').value.trim();
-      if(!no||!name||!cls){Swal.showValidationMessage('กรุณากรอกข้อมูลให้ครบ');return false}
-      return{no,name,cls};
+    html:'<div style="text-align:left">'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เลขที่</label>'
+      +'<input id="sNo" class="swal2-input" type="number" min="1" style="font-family:Sarabun;margin:0 0 10px;width:100%">'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">ชื่อ-นามสกุล</label>'
+      +'<input id="sName" class="swal2-input" placeholder="ชื่อ นามสกุล" style="font-family:Sarabun;margin:0 0 10px;width:100%">'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">ห้อง</label>'
+      +'<select id="sCls" class="swal2-input" style="font-family:Sarabun;margin:0;width:100%">'
+      +'<option value="">-- เลือกห้อง --</option>'+clsOpts
+      +'<option value="__new__">+ เพิ่มห้องใหม่</option>'
+      +'</select>'
+      +'<input id="sClsNew" class="swal2-input" placeholder="เช่น ม.2/1" style="font-family:Sarabun;margin:8px 0 0;width:100%;display:none">'
+      +'</div>',
+    confirmButtonText:'เพิ่มนักเรียน',
+    confirmButtonColor:'#2980b9',
+    showCancelButton:true,
+    cancelButtonText:'ยกเลิก',
+    didOpen:function(){
+      document.getElementById('sCls').addEventListener('change', function(){
+        document.getElementById('sClsNew').style.display = this.value==='__new__' ? '' : 'none';
+      });
+    },
+    preConfirm:function(){
+      var no   = document.getElementById('sNo').value.trim();
+      var name = document.getElementById('sName').value.trim();
+      var cls  = document.getElementById('sCls').value;
+      if(cls==='__new__') cls = document.getElementById('sClsNew').value.trim();
+      if(!no||!name||!cls){ Swal.showValidationMessage('กรุณากรอกข้อมูลให้ครบ'); return false; }
+      return {no:no, name:name, cls:cls};
     }
-  }).then(async r => {
+  }).then(function(r){
     if(!r.isConfirmed) return;
-    const id = makeId(r.value.no, r.value.cls);
-    await set(ref(db,`students/${id}`), { no:Number(r.value.no), name:r.value.name, class:r.value.cls, score:100 });
-    toast('success','เพิ่มนักเรียนสำเร็จ');
-    await loadStudents();
-    renderStudents('');
+    var id = makeId(r.value.no, r.value.cls);
+    db.ref('students/'+id).set({no:Number(r.value.no), name:r.value.name, class:r.value.cls, score:100}).then(function(){
+      toast('success','เพิ่มนักเรียนสำเร็จ','');
+      loadStudents(function(){ renderClassGroups(); });
+    }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
   });
-};
+}
 
 // ── SCORE FORM ──
-function buildScoreForm(sid='') {
-  const opts = APP.students.map(s=>`<option value="${s.id}"${s.id===sid?' selected':''}>${s.name} (${s.class})</option>`).join('');
-  return `<div id="sfWrap" style="text-align:left">
-    <div class="form-group"><label>นักเรียน</label><select id="fSid" style="font-family:Sarabun"><option value="">-- เลือกนักเรียน --</option>${opts}</select></div>
-    <div class="form-group"><label>ประเภท</label>
-      <div style="display:flex;gap:.5rem">
-        <button type="button" id="fBtnPlus" class="btn btn-green" style="flex:1" onclick="setSType(1)"><i class="ti ti-plus"></i> เพิ่มคะแนน</button>
-        <button type="button" id="fBtnMinus" class="btn" style="flex:1;color:var(--red-600);border-color:var(--red-100)" onclick="setSType(-1)"><i class="ti ti-minus"></i> ตัดคะแนน</button>
-      </div>
-    </div>
-    <div class="form-group"><label>เหตุผลด่วน</label>
-      <div id="fPresets" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
-        ${PRESET_PLUS.map(p=>`<button type="button" class="chip" onclick="pickPreset('${p.l}',${p.v})">${p.l} (+${p.v})</button>`).join('')}
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
-      <div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน</label><input id="fDelta" type="number" value="1" min="1" max="100" style="font-family:Sarabun"></div>
-      <div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label><input id="fReason" type="text" placeholder="ระบุเหตุผล" style="font-family:Sarabun"></div>
-    </div>
-    <div class="form-group"><label>หมายเหตุ (ไม่บังคับ)</label><textarea id="fNote" rows="2" style="font-family:Sarabun" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>
-    <div class="form-group"><label><i class="ti ti-camera" style="font-size:15px;vertical-align:-2px"></i> แนบหลักฐาน</label>
-      <input type="file" id="fImg" accept="image/*" onchange="previewImg(this)" style="font-family:Sarabun">
-      <img id="fImgPrev" class="img-preview">
-    </div>
-  </div>`;
+function buildScoreForm(sid){
+  sid = sid || '';
+  var opts = APP.students.map(function(s){
+    return '<option value="'+s.id+'"'+(s.id===sid?' selected':'')+'>'+s.name+' ('+s.class+')</option>';
+  }).join('');
+  return '<div style="text-align:left">'
+    +'<div class="form-group"><label>นักเรียน</label><select id="fSid" style="font-family:Sarabun"><option value="">-- เลือกนักเรียน --</option>'+opts+'</select></div>'
+    +'<div class="form-group"><label>ประเภท</label>'
+    +'<div style="display:flex;gap:.5rem">'
+    +'<button type="button" id="fBtnPlus" class="btn btn-green" style="flex:1" onclick="setSType(1)"><i class="ti ti-plus"></i> เพิ่มคะแนน</button>'
+    +'<button type="button" id="fBtnMinus" class="btn" style="flex:1;color:var(--red-600);border-color:var(--red-100)" onclick="setSType(-1)"><i class="ti ti-minus"></i> ตัดคะแนน</button>'
+    +'</div></div>'
+    +'<div class="form-group"><label>เหตุผลด่วน</label>'
+    +'<div id="fPresets" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">'
+    +PRESET_PLUS.map(function(p){return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (+'+p.v+')</button>';}).join('')
+    +'</div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">'
+    +'<div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน</label><input id="fDelta" type="number" value="1" min="1" max="100" style="font-family:Sarabun"></div>'
+    +'<div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label><input id="fReason" type="text" placeholder="ระบุเหตุผล" style="font-family:Sarabun"></div>'
+    +'</div>'
+    +'<div class="form-group"><label>หมายเหตุ (ไม่บังคับ)</label><textarea id="fNote" rows="2" style="font-family:Sarabun" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>'
+    +'</div>';
 }
 
-window.setSType = t => {
+function setSType(t){
   _stype = t;
-  const pp=$('fBtnPlus'), pm=$('fBtnMinus');
+  var pp = document.getElementById('fBtnPlus'), pm = document.getElementById('fBtnMinus');
+  if(!pp||!pm) return;
   if(t===1){
-    pp.className='btn btn-green';pp.style.flex='1';
-    pm.className='btn';pm.style.cssText='flex:1;color:var(--red-600);border-color:var(--red-100)';
-    $('fPresets').innerHTML=PRESET_PLUS.map(p=>`<button type="button" class="chip" onclick="pickPreset('${p.l}',${p.v})">${p.l} (+${p.v})</button>`).join('');
+    pp.className='btn btn-green'; pp.style.flex='1';
+    pm.className='btn'; pm.style.cssText='flex:1;color:var(--red-600);border-color:var(--red-100)';
+    document.getElementById('fPresets').innerHTML = PRESET_PLUS.map(function(p){
+      return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (+'+p.v+')</button>';
+    }).join('');
   } else {
-    pm.className='btn btn-red';pm.style.flex='1';
-    pp.className='btn';pp.style.cssText='flex:1';
-    $('fPresets').innerHTML=PRESET_MINUS.map(p=>`<button type="button" class="chip" onclick="pickPreset('${p.l}',${p.v})">${p.l} (-${p.v})</button>`).join('');
+    pm.className='btn btn-red'; pm.style.flex='1';
+    pp.className='btn'; pp.style.cssText='flex:1';
+    document.getElementById('fPresets').innerHTML = PRESET_MINUS.map(function(p){
+      return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (-'+p.v+')</button>';
+    }).join('');
   }
-};
-window.pickPreset = (l,v) => { $('fReason').value=l; $('fDelta').value=v; };
-window.previewImg = input => {
-  if(!input.files||!input.files[0]) return;
-  const file=input.files[0]; _imgMime=file.type; _imgName=file.name;
-  const r=new FileReader(); r.onload=e=>{ _imgB64=e.target.result.split(',')[1]; $('fImgPrev').src=e.target.result; $('fImgPrev').style.display='block'; }; r.readAsDataURL(file);
-};
-
-function collectForm() {
-  const sid=$('fSid').value, delta=parseInt($('fDelta').value)||0, reason=$('fReason').value.trim(), note=$('fNote').value.trim();
-  if(!sid){Swal.showValidationMessage('กรุณาเลือกนักเรียน');return false}
-  if(!reason){Swal.showValidationMessage('กรุณาระบุเหตุผล');return false}
-  if(delta<=0){Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน');return false}
-  return{sid,delta:_stype*delta,reason,note};
 }
 
-window.showAddScorePanel = () => {
-  _stype=1; _imgB64=''; _imgMime=''; _imgName='';
-  showPage(`<div class="container">
-    <div class="section-header"><h2 style="margin:0">บันทึกคะแนนพฤติกรรม</h2></div>
-    <div class="card">${buildScoreForm()}
-      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-        <button class="btn btn-green" onclick="submitFromPanel()"><i class="ti ti-check"></i> บันทึก</button>
-      </div>
-    </div>
-  </div>`);
-};
+function pickPreset(l, v){
+  var fr = document.getElementById('fReason'); if(fr) fr.value = l;
+  var fd = document.getElementById('fDelta');  if(fd) fd.value = v;
+}
 
-window.submitFromPanel = async () => {
-  const val = collectForm(); if(!val) return;
-  await doRecordScore(val);
-};
+function collectForm(){
+  var sid    = document.getElementById('fSid').value;
+  var delta  = parseInt(document.getElementById('fDelta').value) || 0;
+  var reason = document.getElementById('fReason').value.trim();
+  var note   = document.getElementById('fNote').value.trim();
+  if(!sid)    { Swal.showValidationMessage('กรุณาเลือกนักเรียน'); return false; }
+  if(!reason) { Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
+  if(delta<=0){ Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน'); return false; }
+  return {sid:sid, delta:_stype*delta, reason:reason, note:note};
+}
 
-window.openScoreModal = (sid='') => {
-  _stype=1; _imgB64=''; _imgMime=''; _imgName='';
+function showAddScorePanel(){
+  _stype=1;
+  showPage('<div class="container">'
+    +'<div class="section-header"><h2 style="margin:0">บันทึกคะแนนพฤติกรรม</h2></div>'
+    +'<div class="card">'+buildScoreForm()
+    +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">'
+    +'<button class="btn btn-green" onclick="submitFromPanel()"><i class="ti ti-check"></i> บันทึก</button>'
+    +'</div></div></div>');
+}
+
+function submitFromPanel(){
+  var val = collectForm(); if(!val) return;
+  doRecordScore(val);
+}
+
+function openScoreModal(sid){
+  _stype=1;
   Swal.fire({
-    title:'บันทึกคะแนนพฤติกรรม', html:buildScoreForm(sid), width:540,
-    confirmButtonText:'<i class="ti ti-check"></i> บันทึก',confirmButtonColor:'#2980b9',
-    showCancelButton:true,cancelButtonText:'ยกเลิก',
-    preConfirm: () => collectForm()
-  }).then(async r => { if(r.isConfirmed&&r.value) await doRecordScore(r.value); });
-};
+    title:'บันทึกคะแนนพฤติกรรม',
+    html: buildScoreForm(sid||''),
+    width:540,
+    confirmButtonText:'<i class="ti ti-check"></i> บันทึก',
+    confirmButtonColor:'#2980b9',
+    showCancelButton:true,
+    cancelButtonText:'ยกเลิก',
+    preConfirm:function(){ return collectForm(); }
+  }).then(function(r){ if(r.isConfirmed && r.value) doRecordScore(r.value); });
+}
 
-async function doRecordScore(val) {
-  const stu = APP.students.find(s=>s.id===val.sid);
-  if(!stu){toast('error','ไม่พบนักเรียน');return}
-  const newScore = Math.max(0, Math.min(100, Number(stu.score)+val.delta));
-  const now = fmtDate();
-  const histRef = push(ref(db,'history'));
-  await Promise.all([
-    set(ref(db,`students/${val.sid}/score`), newScore),
-    set(histRef, { studentId:val.sid, name:stu.name, class:stu.class, delta:val.delta,
-      type:val.delta>0?'เพิ่มคะแนน':'ตัดคะแนน', reason:val.reason, note:val.note||'', by:APP.displayName, ts:now, scoreAfter:newScore })
-  ]);
-  stu.score = newScore;
-  toast('success','บันทึกสำเร็จ',`${val.delta>0?'+':''}${val.delta} คะแนน → ${newScore} คะแนน`);
-  const nav = document.querySelector('.nav-btn.active'); if(nav) nav.click();
+function doRecordScore(val){
+  var stu = APP.students.find(function(s){return s.id===val.sid;});
+  if(!stu){ toast('error','ไม่พบนักเรียน'); return; }
+  var newScore = Math.max(0, Math.min(100, Number(stu.score)+val.delta));
+  var now = fmtDate();
+  var histRef = db.ref('history').push();
+  var updates = {};
+  updates['students/'+val.sid+'/score'] = newScore;
+  db.ref().update(updates).then(function(){
+    return histRef.set({
+      studentId:val.sid, name:stu.name, class:stu.class,
+      delta:val.delta, type:val.delta>0?'เพิ่มคะแนน':'ตัดคะแนน',
+      reason:val.reason, note:val.note||'', by:APP.displayName,
+      ts:now, scoreAfter:newScore
+    });
+  }).then(function(){
+    stu.score = newScore;
+    toast('success','บันทึกสำเร็จ',(val.delta>0?'+':'')+val.delta+' คะแนน → '+newScore+' คะแนน');
+    var active = document.querySelector('.nav-btn.active');
+    if(active) active.click();
+  }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
 }
 
 // ── STUDENT DETAIL ──
-window.openStudentDetail = async sid => {
-  const stu = APP.students.find(s=>s.id===sid); if(!stu) return;
-  const score = Number(stu.score);
-  const result = await Swal.fire({
+function openStudentDetail(sid){
+  var stu = APP.students.find(function(s){return s.id===sid;}); if(!stu) return;
+  var score = Number(stu.score);
+  Swal.fire({
     title:stu.name,
-    html:`<div class="badge ${score>=80?'badge-green':score>=60?'badge-yellow':'badge-red'}" style="font-size:16px;padding:6px 20px">${score} คะแนน</div>
-    <div style="font-size:13px;color:#94a3b8;margin:6px 0 14px">${stu.class} · ${statusText(score)}</div>
-    <div id="sdHist" style="max-height:260px;overflow-y:auto;text-align:left"><div class="loading">กำลังโหลด...</div></div>`,
-    confirmButtonText:'ปิด',confirmButtonColor:'#2980b9',
-    showDenyButton:true,denyButtonText:'<i class="ti ti-plus"></i> บันทึกคะแนน',denyButtonColor:'#1d6b45',
-    didOpen: async () => {
-      const snap = await get(ref(db,'history'));
-      const el = $('sdHist'); if(!el) return;
-      const hist = [];
-      if(snap.exists()) snap.forEach(c=>{ if(c.val().studentId===sid) hist.unshift({id:c.key,...c.val()}); });
-      if(!hist.length){el.innerHTML='<div class="empty">ยังไม่มีประวัติ</div>';return}
-      el.innerHTML = hist.map(h=>`<div class="hist-item">
-        <div class="hist-dot ${h.delta>0?'dot-plus':'dot-minus'}">${h.delta>0?'+'+h.delta:h.delta}</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:500">${h.reason}</div>
-        ${h.note?`<div class="text-muted">${h.note}</div>`:''}
-        <div class="text-muted">${h.ts} · ${h.by}</div></div>
-      </div>`).join('');
+    html:'<div class="badge '+(score>=80?'badge-green':score>=60?'badge-yellow':'badge-red')+'" style="font-size:16px;padding:6px 20px">'+score+' คะแนน</div>'
+      +'<div style="font-size:13px;color:#94a3b8;margin:6px 0 14px">'+stu.class+' · '+statusText(score)+'</div>'
+      +'<div id="sdHist" style="max-height:260px;overflow-y:auto;text-align:left"><div class="loading">กำลังโหลด...</div></div>',
+    confirmButtonText:'ปิด', confirmButtonColor:'#2980b9',
+    showDenyButton:true, denyButtonText:'<i class="ti ti-plus"></i> บันทึกคะแนน', denyButtonColor:'#1d6b45',
+    didOpen:function(){
+      db.ref('history').once('value').then(function(snap){
+        var el = document.getElementById('sdHist'); if(!el) return;
+        var hist = [];
+        if(snap.exists()) snap.forEach(function(c){ if(c.val().studentId===sid) hist.unshift({id:c.key, ...c.val()}); });
+        if(!hist.length){ el.innerHTML='<div class="empty">ยังไม่มีประวัติ</div>'; return; }
+        el.innerHTML = hist.map(function(h){
+          return '<div class="hist-item"><div class="hist-dot '+(h.delta>0?'dot-plus':'dot-minus')+'">'+(h.delta>0?'+'+h.delta:h.delta)+'</div>'
+            +'<div style="flex:1"><div style="font-size:13px;font-weight:500">'+h.reason+'</div>'
+            +(h.note?'<div class="text-muted">'+h.note+'</div>':'')
+            +'<div class="text-muted">'+h.ts+' · '+h.by+'</div></div></div>';
+        }).join('');
+      });
     }
-  });
-  if(result.isDenied) openScoreModal(sid);
-};
+  }).then(function(r){ if(r.isDenied) openScoreModal(sid); });
+}
 
 // ── HISTORY ──
-window.loadHistory = async () => {
+function loadHistory(){
   showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
-  const snap = await get(ref(db,'history'));
-  const hist = [];
-  if(snap.exists()) snap.forEach(c => hist.unshift({id:c.key,...c.val()}));
-
-  let h = `<div class="container">
-  <div class="section-header"><h2 style="margin:0">ประวัติการบันทึกคะแนน</h2>
-    <div style="display:flex;gap:.5rem">
-      <button class="btn" onclick="filterHist('plus')"><i class="ti ti-arrow-up" style="color:var(--green-600)"></i> เพิ่มคะแนน</button>
-      <button class="btn" onclick="filterHist('minus')"><i class="ti ti-arrow-down" style="color:var(--red-600)"></i> ตัดคะแนน</button>
-      <button class="btn" onclick="filterHist('')"><i class="ti ti-list"></i> ทั้งหมด</button>
-    </div>
-  </div>
-  <div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="histSearch" placeholder="ค้นหา..." oninput="filterHistSearch()"></div>
-  <div class="card" style="padding:0"><div class="table-wrap"><table id="histTbl">
-    <thead><tr><th>วันที่-เวลา</th><th>ชื่อนักเรียน</th><th>ห้อง</th><th>ประเภท</th><th>คะแนน</th><th>เหตุผล</th><th>หมายเหตุ</th><th>บันทึกโดย</th><th style="text-align:right">จัดการ</th></tr></thead>
-    <tbody>`;
-
-  if(!hist.length) h += '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--gray-400)">ยังไม่มีประวัติ</td></tr>';
-  else hist.forEach(hh => {
-    const plus = hh.delta>0;
-    h += `<tr data-type="${plus?'plus':'minus'}">
-      <td style="white-space:nowrap;font-size:12px">${hh.ts}</td>
-      <td style="font-weight:500">${hh.name}</td><td>${hh.class}</td>
-      <td>${plus?'<span class="badge badge-green">เพิ่มคะแนน</span>':'<span class="badge badge-red">ตัดคะแนน</span>'}</td>
-      <td><span style="font-weight:700;color:${plus?'var(--green-600)':'var(--red-600)'}">${plus?'+':''}${hh.delta}</span></td>
-      <td>${hh.reason}</td><td>${hh.note||''}</td>
-      <td style="font-size:12px">${hh.by}</td>
-      <td><div class="td-actions">
-        <button class="btn btn-sm btn-icon" title="แก้ไข" onclick="openEditHist('${hh.id}',${hh.delta},'${(hh.reason||'').replace(/'/g,"\\'")}','${(hh.note||'').replace(/'/g,"\\'")}')"><i class="ti ti-edit"></i></button>
-        <button class="btn btn-sm btn-icon" style="color:var(--red-600);border-color:var(--red-100)" title="ลบ" onclick="deleteHist('${hh.id}','${hh.studentId}',${hh.delta})"><i class="ti ti-trash"></i></button>
-      </div></td>
-    </tr>`;
-  });
-  h += '</tbody></table></div></div></div>';
-  showPage(h);
-};
-
-window.filterHist = type => document.querySelectorAll('#histTbl tbody tr').forEach(r => r.style.display=(!type||r.dataset.type===type)?'':'none');
-window.filterHistSearch = () => { const q=$('histSearch').value.toLowerCase(); document.querySelectorAll('#histTbl tbody tr').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q)?'':'none'); };
-
-window.openEditHist = (histId, delta, reason, note) => {
-  Swal.fire({
-    title:'แก้ไขรายการ',
-    html:`<div style="text-align:left">
-      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน (+ได้รับ / -ถูกหัก)</label>
-      <input id="eDelta" class="swal2-input" type="number" value="${delta}" style="font-family:Sarabun;width:100%;margin:0 0 10px">
-      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label>
-      <input id="eReason" class="swal2-input" value="${reason}" style="font-family:Sarabun;width:100%;margin:0 0 10px">
-      <label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">หมายเหตุ</label>
-      <textarea id="eNote" class="swal2-textarea" style="font-family:Sarabun;width:100%;margin:0">${note}</textarea>
-    </div>`,
-    confirmButtonText:'บันทึกการแก้ไข',confirmButtonColor:'#2980b9',showCancelButton:true,cancelButtonText:'ยกเลิก',
-    preConfirm: () => {
-      const d=parseInt($('eDelta').value), r=$('eReason').value.trim();
-      if(!r){Swal.showValidationMessage('กรุณาระบุเหตุผล');return false}
-      return{delta:d,reason:r,note:$('eNote').value.trim()};
-    }
-  }).then(async r => {
-    if(!r.isConfirmed) return;
-    const snap = await get(ref(db,`history/${histId}`));
-    if(!snap.exists()) return;
-    const old = snap.val();
-    const diff = r.value.delta - old.delta;
-    await update(ref(db,`history/${histId}`), { delta:r.value.delta, reason:r.value.reason, note:r.value.note, type:r.value.delta>0?'เพิ่มคะแนน':'ตัดคะแนน' });
-    if(diff!==0) {
-      const stuSnap = await get(ref(db,`students/${old.studentId}/score`));
-      const cur = stuSnap.exists()?Number(stuSnap.val()):100;
-      await set(ref(db,`students/${old.studentId}/score`), Math.max(0,Math.min(100,cur+diff)));
-      const stu = APP.students.find(s=>s.id===old.studentId); if(stu) stu.score=Math.max(0,Math.min(100,Number(stu.score)+diff));
-    }
-    toast('success','แก้ไขสำเร็จ'); loadHistory();
-  });
-};
-
-window.deleteHist = async (histId, studentId, delta) => {
-  const r = await Swal.fire({icon:'warning',title:'ยืนยันการลบ',text:'การลบจะคืนคะแนนให้นักเรียนอัตโนมัติ',confirmButtonText:'ลบรายการนี้',confirmButtonColor:'#e53e3e',showCancelButton:true,cancelButtonText:'ยกเลิก'});
-  if(!r.isConfirmed) return;
-  const stuSnap = await get(ref(db,`students/${studentId}/score`));
-  const cur = stuSnap.exists()?Number(stuSnap.val()):100;
-  await Promise.all([
-    remove(ref(db,`history/${histId}`)),
-    set(ref(db,`students/${studentId}/score`), Math.max(0,Math.min(100,cur-delta)))
-  ]);
-  const stu = APP.students.find(s=>s.id===studentId); if(stu) stu.score=Math.max(0,Math.min(100,Number(stu.score)-delta));
-  toast('success','ลบสำเร็จ','คะแนนถูกคืนให้นักเรียนแล้ว'); loadHistory();
-};
-
-// ── REPORT ──
-window.loadReport = async () => {
-  showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
-  await loadStudents();
-  const classMap = {};
-  APP.students.forEach(s => { if(!classMap[s.class]) classMap[s.class]=[]; classMap[s.class].push(s); });
-  const report = Object.keys(classMap).sort().map(cls => {
-    const list=classMap[cls];
-    const avg=Math.round(list.reduce((a,x)=>a+Number(x.score),0)/list.length);
-    return{cls,count:list.length,avg,above80:list.filter(s=>s.score>=80).length,above60:list.filter(s=>s.score>=60&&s.score<80).length,below60:list.filter(s=>s.score<60).length,students:list.sort((a,b)=>a.no-b.no)};
-  });
-
-  let h = `<div class="container">
-  <div class="section-header"><h2 style="margin:0">รายงานสรุปคะแนนพฤติกรรม</h2>
-    <div style="display:flex;gap:.5rem">
-      <button class="btn" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button>
-      <button class="btn" onclick="window.print()"><i class="ti ti-printer"></i> พิมพ์</button>
-    </div>
-  </div>
-  <div class="grid-3" style="margin-bottom:1.25rem">`;
-
-  report.forEach(c => {
-    const color=c.avg>=80?'var(--green-600)':c.avg>=60?'var(--yellow-800)':'var(--red-600)';
-    h+=`<div class="card"><h3>${c.cls} <span class="badge badge-blue">${c.count} คน</span></h3>
-    <div style="font-size:36px;font-weight:700;color:${color};margin-bottom:.25rem">${c.avg}</div>
-    <div class="text-muted" style="margin-bottom:.5rem">คะแนนเฉลี่ย</div>
-    <div class="pbar"><div class="pbar-fill" style="width:${c.avg}%;background:${color}"></div></div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:.4rem">
-      <span style="color:var(--green-600)">≥80: ${c.above80}</span>
-      <span style="color:var(--yellow-800)">60-79: ${c.above60}</span>
-      <span style="color:var(--red-600)">&lt;60: ${c.below60}</span>
-    </div></div>`;
-  });
-  h += '</div><div class="card"><h3>รายละเอียดนักเรียน</h3><div class="tab-bar">';
-  report.forEach((c,i) => h+=`<button class="tbtn${i===0?' active':''}" onclick="switchTab('tr_${c.cls.replace('/','_')}',this)">${c.cls}</button>`);
-  h += '</div>';
-  report.forEach((c,i) => {
-    h+=`<div class="tc${i===0?' active':''}" id="tr_${c.cls.replace('/','_')}"><div class="table-wrap"><table>
-    <thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนน</th><th>สถานะ</th></tr></thead><tbody>`;
-    c.students.forEach(s=>h+=`<tr><td>${s.no}</td><td>${s.name}</td><td>${scoreBadge(Number(s.score))}</td><td>${statusBadge(Number(s.score))}</td></tr>`);
-    h+='</tbody></table></div></div>';
-  });
-  h += '</div></div>';
-  showPage(h);
-};
-
-window.switchTab = (id,btn) => {
-  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('active')); $(id).classList.add('active');
-};
-
-window.exportCSV = async () => {
-  await loadStudents();
-  let csv = '\uFEFF' + 'ห้อง,เลขที่,ชื่อ-นามสกุล,คะแนน,สถานะ\n';
-  APP.students.forEach(s => {
-    const st = s.score>=80?'ดี':s.score>=60?'ปานกลาง':'ต้องดูแล';
-    csv += `${s.class},${s.no},"${s.name}",${s.score},${st}\n`;
-  });
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download='คะแนนพฤติกรรม.csv'; a.click();
-};
-
-// ── STUDENT VIEW ──
-function renderMyScore() {
-  const stu = APP.stuData; if(!stu) return;
-  const score = Number(stu.score);
-  let h = `<div class="container">
-  <div class="stu-hero">
-    <div class="stu-avatar">${stu.name.charAt(0)}</div>
-    <div><div style="font-size:17px;font-weight:700">${stu.name}</div><div style="opacity:.8;font-size:13px">${stu.class}</div></div>
-    <div style="margin-left:auto;text-align:right"><div class="score-hero ${scoreCls(score)}" style="color:#fff">${score}</div><div style="font-size:12px;opacity:.7">/ 100 คะแนน</div></div>
-  </div>
-  <div class="grid-3" style="margin-bottom:1rem">
-    <div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-award"></i></div><div><div class="stat-num ${scoreCls(score)}">${score}</div><div class="stat-label">คะแนนปัจจุบัน</div></div></div>
-    <div class="stat-card"><div class="stat-icon ${score>=80?'si-green':score>=60?'si-yellow':'si-red'}"><i class="ti ti-mood-${score>=80?'happy':score>=60?'smile':'sad'}"></i></div><div><div class="stat-num" style="font-size:18px">${statusText(score)}</div><div class="stat-label">สถานะ</div></div></div>
-    <div class="stat-card" style="background:var(--yellow-100);border-color:var(--yellow-200)"><div class="stat-icon si-yellow"><i class="ti ti-info-circle"></i></div><div><div style="font-size:13px;color:var(--yellow-800);font-weight:500">ภาคเรียนที่ 1/2569</div><div class="stat-label">คะแนนเต็ม 100</div></div></div>
-  </div>
-  <div class="card"><h3>ประวัติคะแนนล่าสุด</h3><div id="myHist"><div class="loading">กำลังโหลด...</div></div></div>
-  </div>`;
-  showPage(h);
-
-  get(ref(db,'history')).then(snap => {
-    const el=$('myHist'); if(!el) return;
-    const hist=[];
-    if(snap.exists()) snap.forEach(c=>{ if(c.val().studentId===stu.id) hist.unshift({id:c.key,...c.val()}); });
-    if(!hist.length){el.innerHTML='<div class="empty">ยังไม่มีประวัติคะแนน</div>';return}
-    el.innerHTML=hist.slice(0,10).map(hh=>`<div class="hist-item">
-      <div class="hist-dot ${hh.delta>0?'dot-plus':'dot-minus'}">${hh.delta>0?'+'+hh.delta:hh.delta}</div>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600">${hh.reason}</div>
-      ${hh.note?`<div class="text-muted">${hh.note}</div>`:''}
-      <div class="text-muted">${hh.ts} · ${hh.by}</div></div>
-    </div>`).join('');
+  db.ref('history').once('value').then(function(snap){
+    var hist = [];
+    if(snap.exists()) snap.forEach(function(c){ hist.unshift({id:c.key, ...c.val()}); });
+    var h = '<div class="container">';
+    h += '<div class="section-header"><h2 style="margin:0">ประวัติการบันทึกคะแนน</h2>';
+    h += '<div style="display:flex;gap:.5rem">';
+    h += '<button class="btn" onclick="filterHist(\'plus\')"><i class="ti ti-arrow-up" style="color:var(--green-600)"></i> เพิ่มคะแนน</button>';
+    h += '<button class="btn" onclick="filterHist(\'minus\')"><i class="ti ti-arrow-down" style="color:var(--red-600)"></i> ตัดคะแนน</button>';
+    h += '<button class="btn" onclick="filterHist(\'\')"><i class="ti ti-list"></i> ทั้งหมด</button>';
+    h += '</div></div>';
+    h += '<div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="histSearch" placeholder="ค้นหา..." oninput="filterHistSearch()"></div>';
+    h += '<div class="card" style="padding:0"><div class="table-wrap"><table id="histTbl">';
+    h += '<thead><tr><th>วันที่-เวลา</th><th>ชื่อนักเรียน</th><th>ห้อง</th><th>ประเภท</th><th>คะแนน</th><th>เหตุผล</th><th>บันทึกโดย</th><th style="text-align:right">จัดการ</th></tr></thead><tbody>';
+    if(!hist.length) h += '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray-400)">ยังไม่มีประวัติ</td></tr>';
+    else hist.forEach(function(hh){
+      var plus = hh.delta > 0;
+      h += '<tr data-type="'+(plus?'plus':'minus')+'">';
+      h += '<td style="white-space:nowrap;font-size:12px">'+hh.ts+'</td>';
+      h += '<td style="font-weight:500">'+hh.name+'</td><td>'+hh.class+'</td>';
+      h += '<td>'+(plus?'<span class="badge badge-green">เพิ่มคะแนน</span>':'<span class="badge badge-red">ตัดคะแนน</span>')+'</td>';
+      h += '<td><span style="font-weight:700;color:'+(plus?'var(--green-600)':'var(--red-600)')+'">'+(plus?'+':'')+hh.delta+'</span></td>';
+      h += '<td>'+hh.reason+'</td>';
+      h += '<td style="font-size:12px">'+hh.by+'</td>';
+      h += '<td><div class="td-actions">';
+      h += '<button class="btn btn-sm" title="แก้ไข" onclick="openEditHist(\''+hh.id+'\','+hh.delta+',\''+escq(hh.reason)+'\',\''+escq(hh.note||'')+'\')"><i class="ti ti-edit"></i></button>';
+      h += '<button class="btn btn-sm" style="color:var(--red-600);border-color:var(--red-100)" title="ลบ" onclick="deleteHist(\''+hh.id+'\',\''+hh.studentId+'\','+hh.delta+')"><i class="ti ti-trash"></i></button>';
+      h += '</div></td></tr>';
+    });
+    h += '</tbody></table></div></div></div>';
+    showPage(h);
   });
 }
-window.renderMyScore = renderMyScore;
 
-window.loadStudentHistory = async sid => {
+function escq(s){ return (s||'').replace(/'/g,"\\'"); }
+function filterHist(type){
+  document.querySelectorAll('#histTbl tbody tr').forEach(function(r){
+    r.style.display = (!type || r.dataset.type===type) ? '' : 'none';
+  });
+}
+function filterHistSearch(){
+  var q = $('histSearch').value.toLowerCase();
+  document.querySelectorAll('#histTbl tbody tr').forEach(function(r){
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function openEditHist(histId, delta, reason, note){
+  Swal.fire({
+    title:'แก้ไขรายการ',
+    html:'<div style="text-align:left">'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน (+ได้รับ / -ถูกหัก)</label>'
+      +'<input id="eDelta" class="swal2-input" type="number" value="'+delta+'" style="font-family:Sarabun;width:100%;margin:0 0 10px">'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label>'
+      +'<input id="eReason" class="swal2-input" value="'+reason+'" style="font-family:Sarabun;width:100%;margin:0 0 10px">'
+      +'<label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">หมายเหตุ</label>'
+      +'<textarea id="eNote" class="swal2-textarea" style="font-family:Sarabun;width:100%;margin:0">'+note+'</textarea>'
+      +'</div>',
+    confirmButtonText:'บันทึกการแก้ไข', confirmButtonColor:'#2980b9',
+    showCancelButton:true, cancelButtonText:'ยกเลิก',
+    preConfirm:function(){
+      var d = parseInt(document.getElementById('eDelta').value);
+      var r = document.getElementById('eReason').value.trim();
+      if(!r){ Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
+      return {delta:d, reason:r, note:document.getElementById('eNote').value.trim()};
+    }
+  }).then(function(r){
+    if(!r.isConfirmed) return;
+    db.ref('history/'+histId).once('value').then(function(snap){
+      if(!snap.exists()) return;
+      var old  = snap.val();
+      var diff = r.value.delta - old.delta;
+      db.ref('history/'+histId).update({delta:r.value.delta, reason:r.value.reason, note:r.value.note, type:r.value.delta>0?'เพิ่มคะแนน':'ตัดคะแนน'}).then(function(){
+        if(diff!==0){
+          db.ref('students/'+old.studentId+'/score').once('value').then(function(s){
+            var cur = s.exists() ? Number(s.val()) : 100;
+            db.ref('students/'+old.studentId+'/score').set(Math.max(0,Math.min(100,cur+diff)));
+            var stu = APP.students.find(function(x){return x.id===old.studentId;});
+            if(stu) stu.score = Math.max(0,Math.min(100,Number(stu.score)+diff));
+          });
+        }
+        toast('success','แก้ไขสำเร็จ',''); loadHistory();
+      });
+    });
+  });
+}
+
+function deleteHist(histId, studentId, delta){
+  Swal.fire({
+    icon:'warning', title:'ยืนยันการลบ', text:'การลบจะคืนคะแนนให้นักเรียนอัตโนมัติ',
+    confirmButtonText:'ลบรายการนี้', confirmButtonColor:'#e53e3e',
+    showCancelButton:true, cancelButtonText:'ยกเลิก'
+  }).then(function(r){
+    if(!r.isConfirmed) return;
+    db.ref('students/'+studentId+'/score').once('value').then(function(s){
+      var cur = s.exists() ? Number(s.val()) : 100;
+      db.ref('students/'+studentId+'/score').set(Math.max(0,Math.min(100,cur-delta)));
+      var stu = APP.students.find(function(x){return x.id===studentId;});
+      if(stu) stu.score = Math.max(0,Math.min(100,Number(stu.score)-delta));
+      return db.ref('history/'+histId).remove();
+    }).then(function(){
+      toast('success','ลบสำเร็จ','คะแนนถูกคืนให้นักเรียนแล้ว'); loadHistory();
+    }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
+  });
+}
+
+// ── REPORT ──
+function loadReport(){
   showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
-  const snap = await get(ref(db,'history'));
-  const hist=[];
-  if(snap.exists()) snap.forEach(c=>{ if(c.val().studentId===sid) hist.unshift({id:c.key,...c.val()}); });
-  let h='<div class="container"><h2>ประวัติคะแนนทั้งหมด</h2><div class="card">';
-  if(!hist.length) h+='<div class="empty">ยังไม่มีประวัติ</div>';
-  else hist.forEach(hh=>{ h+=`<div class="hist-item">
-    <div class="hist-dot ${hh.delta>0?'dot-plus':'dot-minus'}">${hh.delta>0?'+'+hh.delta:hh.delta}</div>
-    <div style="flex:1"><div style="font-size:13px;font-weight:600">${hh.reason}</div>
-    ${hh.note?`<div class="text-muted">${hh.note}</div>`:''}
-    <div class="text-muted">${hh.ts} · ${hh.by}</div></div>
-    <div style="font-weight:700;color:${hh.delta>0?'var(--green-600)':'var(--red-600)'}">${hh.delta>0?'+':''}${hh.delta}</div>
-  </div>`; });
-  h+='</div></div>';
+  loadStudents(function(students){
+    var classMap = {};
+    students.forEach(function(s){
+      if(!classMap[s.class]) classMap[s.class]=[];
+      classMap[s.class].push(s);
+    });
+    var report = Object.keys(classMap).sort().map(function(cls){
+      var list = classMap[cls];
+      var avg  = Math.round(list.reduce(function(a,x){return a+Number(x.score);},0)/list.length);
+      return {cls:cls, count:list.length, avg:avg,
+        above80:list.filter(function(s){return s.score>=80;}).length,
+        above60:list.filter(function(s){return s.score>=60&&s.score<80;}).length,
+        below60:list.filter(function(s){return s.score<60;}).length,
+        students:list.sort(function(a,b){return a.no-b.no;})};
+    });
+
+    var h = '<div class="container">';
+    h += '<div class="section-header"><h2 style="margin:0">รายงานสรุปคะแนนพฤติกรรม</h2>';
+    h += '<div style="display:flex;gap:.5rem"><button class="btn" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button>';
+    h += '<button class="btn" onclick="window.print()"><i class="ti ti-printer"></i> พิมพ์</button></div></div>';
+    h += '<div class="grid-3" style="margin-bottom:1.25rem">';
+    report.forEach(function(c){
+      var color = c.avg>=80?'var(--green-600)':c.avg>=60?'var(--yellow-800)':'var(--red-600)';
+      h += '<div class="card"><h3>'+c.cls+' <span class="badge badge-blue">'+c.count+' คน</span></h3>';
+      h += '<div style="font-size:36px;font-weight:700;color:'+color+';margin-bottom:.25rem">'+c.avg+'</div>';
+      h += '<div class="text-muted" style="margin-bottom:.5rem">คะแนนเฉลี่ย</div>';
+      h += '<div class="pbar"><div class="pbar-fill" style="width:'+c.avg+'%;background:'+color+'"></div></div>';
+      h += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:.4rem">';
+      h += '<span style="color:var(--green-600)">≥80: '+c.above80+'</span>';
+      h += '<span style="color:var(--yellow-800)">60-79: '+c.above60+'</span>';
+      h += '<span style="color:var(--red-600)">&lt;60: '+c.below60+'</span></div></div>';
+    });
+    h += '</div><div class="card"><h3>รายละเอียดนักเรียน</h3><div class="tab-bar">';
+    report.forEach(function(c,i){
+      h += '<button class="tbtn'+(i===0?' active':'')+'" onclick="switchTab(\'tr_'+c.cls.replace('/','_')+'\',this)">'+c.cls+'</button>';
+    });
+    h += '</div>';
+    report.forEach(function(c,i){
+      h += '<div class="tc'+(i===0?' active':'')+'" id="tr_'+c.cls.replace('/','_')+'"><div class="table-wrap"><table>';
+      h += '<thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนน</th><th>สถานะ</th></tr></thead><tbody>';
+      c.students.forEach(function(s){
+        h += '<tr><td>'+s.no+'</td><td>'+s.name+'</td><td>'+scoreBadge(Number(s.score))+'</td><td>'+statusBadge(Number(s.score))+'</td></tr>';
+      });
+      h += '</tbody></table></div></div>';
+    });
+    h += '</div></div>';
+    showPage(h);
+  });
+}
+
+function switchTab(id, btn){
+  document.querySelectorAll('.tbtn').forEach(function(b){b.classList.remove('active');}); btn.classList.add('active');
+  document.querySelectorAll('.tc').forEach(function(t){t.classList.remove('active');}); $(id).classList.add('active');
+}
+
+function exportCSV(){
+  var csv = '\uFEFF' + 'ห้อง,เลขที่,ชื่อ-นามสกุล,คะแนน,สถานะ\n';
+  APP.students.forEach(function(s){
+    var st = s.score>=80?'ดี':s.score>=60?'ปานกลาง':'ต้องดูแล';
+    csv += s.class+','+s.no+',"'+s.name+'",'+s.score+','+st+'\n';
+  });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download = 'คะแนนพฤติกรรม.csv'; a.click();
+}
+
+// ── STUDENT VIEW ──
+function renderMyScore(){
+  var stu = APP.stuData; if(!stu) return;
+  var score = Number(stu.score);
+  var h = '<div class="container">';
+  h += '<div class="stu-hero"><div class="stu-avatar">'+stu.name.charAt(0)+'</div>';
+  h += '<div><div style="font-size:17px;font-weight:700">'+stu.name+'</div><div style="opacity:.8;font-size:13px">'+stu.class+'</div></div>';
+  h += '<div style="margin-left:auto;text-align:right"><div class="score-hero '+scoreCls(score)+'" style="color:#fff">'+score+'</div>';
+  h += '<div style="font-size:12px;opacity:.7">/ 100 คะแนน</div></div></div>';
+  h += '<div class="grid-3" style="margin-bottom:1rem">';
+  h += '<div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-award"></i></div><div><div class="stat-num '+scoreCls(score)+'">'+score+'</div><div class="stat-label">คะแนนปัจจุบัน</div></div></div>';
+  h += '<div class="stat-card"><div class="stat-icon '+(score>=80?'si-green':score>=60?'si-yellow':'si-red')+'"><i class="ti ti-mood-'+(score>=80?'happy':score>=60?'smile':'sad')+'"></i></div>';
+  h += '<div><div class="stat-num" style="font-size:18px">'+statusText(score)+'</div><div class="stat-label">สถานะ</div></div></div>';
+  h += '<div class="stat-card" style="background:var(--yellow-100);border-color:var(--yellow-200)"><div class="stat-icon si-yellow"><i class="ti ti-info-circle"></i></div>';
+  h += '<div><div style="font-size:13px;color:var(--yellow-800);font-weight:500">ภาคเรียนที่ 1/2569</div><div class="stat-label">คะแนนเต็ม 100</div></div></div>';
+  h += '</div><div class="card"><h3>ประวัติคะแนนล่าสุด</h3><div id="myHist"><div class="loading">กำลังโหลด...</div></div></div></div>';
   showPage(h);
-};
+
+  db.ref('history').once('value').then(function(snap){
+    var el = $('myHist'); if(!el) return;
+    var hist = [];
+    if(snap.exists()) snap.forEach(function(c){ if(c.val().studentId===stu.id) hist.unshift({id:c.key, ...c.val()}); });
+    if(!hist.length){ el.innerHTML='<div class="empty">ยังไม่มีประวัติคะแนน</div>'; return; }
+    el.innerHTML = hist.slice(0,10).map(function(hh){
+      return '<div class="hist-item"><div class="hist-dot '+(hh.delta>0?'dot-plus':'dot-minus')+'">'+(hh.delta>0?'+'+hh.delta:hh.delta)+'</div>'
+        +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+hh.reason+'</div>'
+        +(hh.note?'<div class="text-muted">'+hh.note+'</div>':'')
+        +'<div class="text-muted">'+hh.ts+' · '+hh.by+'</div></div></div>';
+    }).join('');
+  });
+}
+
+function loadStudentHistory(sid){
+  showPage('<div class="container"><div class="loading">กำลังโหลด...</div></div>');
+  db.ref('history').once('value').then(function(snap){
+    var hist = [];
+    if(snap.exists()) snap.forEach(function(c){ if(c.val().studentId===sid) hist.unshift({id:c.key, ...c.val()}); });
+    var h = '<div class="container"><h2>ประวัติคะแนนทั้งหมด</h2><div class="card">';
+    if(!hist.length) h += '<div class="empty">ยังไม่มีประวัติ</div>';
+    else hist.forEach(function(hh){
+      h += '<div class="hist-item"><div class="hist-dot '+(hh.delta>0?'dot-plus':'dot-minus')+'">'+(hh.delta>0?'+'+hh.delta:hh.delta)+'</div>'
+        +'<div style="flex:1"><div style="font-size:13px;font-weight:600">'+hh.reason+'</div>'
+        +(hh.note?'<div class="text-muted">'+hh.note+'</div>':'')
+        +'<div class="text-muted">'+hh.ts+' · '+hh.by+'</div></div>'
+        +'<div style="font-weight:700;color:'+(hh.delta>0?'var(--green-600)':'var(--red-600)')+'">'+(hh.delta>0?'+':'')+hh.delta+'</div></div>';
+    });
+    h += '</div></div>';
+    showPage(h);
+  });
+}
+
+// ── EVENT LISTENERS ──
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPass').addEventListener('keypress', function(e){ if(e.key==='Enter') doLogin(); });
+document.getElementById('stuBtn').addEventListener('click', doStudentLogin);
+document.getElementById('stuClass').addEventListener('change', onClassChange);
+document.getElementById('logoutBtn').addEventListener('click', doLogout);
+document.getElementById('roleTeacher').addEventListener('click', function(){ pickRole('teacher'); });
+document.getElementById('roleStudent').addEventListener('click', function(){ pickRole('student'); });
 
 // ── INIT ──
-setupInitialData();
-loadStudents();
-
-// ── EVENT LISTENERS (แทน onclick ใน HTML) ──
-document.getElementById('loginBtn').addEventListener('click', doLogin);
-document.getElementById('loginPass').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
-document.getElementById('stuBtn').addEventListener('click', doStudentLogin);
-document.getElementById('stuName').addEventListener('keypress', e => { if(e.key==='Enter') doStudentLogin(); });
-document.getElementById('roleTeacher').addEventListener('click', () => pickRole('teacher'));
-document.getElementById('roleStudent').addEventListener('click', () => pickRole('student'));
-
+loadStudents(function(){});
 </script>
 </body>
 </html>
