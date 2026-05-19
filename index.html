@@ -1073,65 +1073,57 @@ function pdfUpdateStudents(){
   grp.style.display='';
 }
 
-function generatePDF(type,cls,sid){
-  if(!window.jspdf){toast('error','ไม่สามารถโหลด jsPDF ได้');return;}
-  var doc=new window.jspdf.jsPDF('p','mm','a4');
-  var students=APP.students.slice();
-  if(type==='class') students=students.filter(function(s){return s.class===cls;});
-  if(type==='student') students=students.filter(function(s){return s.id===sid;});
+function generatePDF(type, cls, sid){
+  var students = APP.students.slice();
+  if(type==='class') students = students.filter(function(s){return s.class===cls;});
+  if(type==='student') students = students.filter(function(s){return s.id===sid;});
   if(!students.length){toast('warning','ไม่พบข้อมูล');return;}
 
-  // Header
-  doc.setFontSize(16);doc.setFont('helvetica','bold');
-  doc.text('รายงานคะแนนพฤติกรรมนักเรียน',105,16,{align:'center'});
-  doc.setFontSize(11);doc.setFont('helvetica','normal');
-  doc.text('โรงเรียนบ้านสวนวิทยาคม  ภาคเรียนที่ 1/2569',105,23,{align:'center'});
-  doc.text('วันที่พิมพ์: '+new Date().toLocaleDateString('th-TH'),105,29,{align:'center'});
-  doc.setDrawColor(41,128,185);doc.setLineWidth(0.5);doc.line(14,32,196,32);
-
-  var map={};
+  var map = {};
   students.forEach(function(s){if(!map[s.class])map[s.class]=[];map[s.class].push(s);});
-  var yPos=38;
+
+  var win = window.open('','_blank');
+  var html = '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">'
+    +'<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Sarabun,sans-serif;font-size:13px;color:#000;padding:20px}'
+    +'.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #2980b9;padding-bottom:12px}'
+    +'.header h1{font-size:18px;font-weight:700;color:#2980b9}'
+    +'.header p{font-size:12px;color:#555;margin-top:4px}'
+    +'.class-section{margin-bottom:24px}'
+    +'.class-title{font-size:15px;font-weight:700;color:#2980b9;margin-bottom:8px;padding:4px 8px;background:#e8f4fd;border-left:4px solid #2980b9}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}'
+    +'thead th{background:#2980b9;color:#fff;padding:7px 10px;text-align:left;font-weight:600}'
+    +'tbody td{padding:6px 10px;border-bottom:1px solid #ddd}'
+    +'tbody tr:nth-child(even){background:#f5f9ff}'
+    +'.good{color:#1d6b45;font-weight:600}'
+    +'.mid{color:#7a5c00;font-weight:600}'
+    +'.bad{color:#e53e3e;font-weight:600}'
+    +'.footer{text-align:center;margin-top:20px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px}'
+    +'@media print{body{padding:10px}button{display:none}}'
+    +'</style></head><body>';
+
+  html += '<div class="header"><h1>รายงานคะแนนพฤติกรรมนักเรียน</h1>';
+  html += '<p>โรงเรียนบ้านสวนวิทยาคม &nbsp;|&nbsp; ภาคเรียนที่ 1 ปีการศึกษา 2569</p>';
+  html += '<p>วันที่พิมพ์: '+new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})+'</p></div>';
 
   Object.keys(map).sort().forEach(function(c){
-    if(yPos>245){doc.addPage();yPos=20;}
-    doc.setFont('helvetica','bold');doc.setFontSize(12);
-    doc.setTextColor(41,128,185);
-    doc.text((type==='student'?'นักเรียน: ':'ชั้น: ')+c,14,yPos);
-    doc.setTextColor(0,0,0);yPos+=5;
-    var rows=map[c].sort(function(a,b){return Number(a.no)-Number(b.no);}).map(function(s){
-      return[String(s.no),s.name,String(s.score),(s.score>=80?'ดี':s.score>=60?'ปานกลาง':'ต้องดูแล'),String(s.volunteer||0)];
+    html += '<div class="class-section"><div class="class-title">ชั้น '+c+'</div>';
+    html += '<table><thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>คะแนนพฤติกรรม</th><th>สถานะ</th><th>คะแนนจิตอาสา</th></tr></thead><tbody>';
+    map[c].sort(function(a,b){return a.no-b.no;}).forEach(function(s){
+      var st = s.score>=80?'<span class="good">ดี</span>':s.score>=60?'<span class="mid">ปานกลาง</span>':'<span class="bad">ต้องดูแล</span>';
+      html += '<tr><td>'+s.no+'</td><td>'+s.name+'</td><td style="text-align:center">'+s.score+'</td><td>'+st+'</td><td style="text-align:center">'+(s.volunteer||0)+'</td></tr>';
     });
-    doc.autoTable({
-      startY:yPos,
-      head:[['เลขที่','ชื่อ-นามสกุล','คะแนนพฤติกรรม','สถานะ','คะแนนจิตอาสา']],
-      body:rows,theme:'striped',
-      headStyles:{fillColor:[41,128,185],textColor:255,fontSize:10,fontStyle:'bold'},
-      bodyStyles:{fontSize:9},
-      alternateRowStyles:{fillColor:[240,248,252]},
-      columnStyles:{0:{cellWidth:14},1:{cellWidth:72},2:{cellWidth:32},3:{cellWidth:24},4:{cellWidth:30}},
-      margin:{left:14,right:14},
-      didParseCell:function(data){
-        if(data.section==='body'&&data.column.index===3){
-          if(data.cell.raw==='ดี')data.cell.styles.textColor=[29,107,69];
-          else if(data.cell.raw==='ต้องดูแล')data.cell.styles.textColor=[229,62,62];
-          else data.cell.styles.textColor=[122,92,0];
-        }
-      }
-    });
-    yPos=doc.lastAutoTable.finalY+10;
+    html += '</tbody></table></div>';
   });
 
-  // Page numbers
-  var total=doc.internal.getNumberOfPages();
-  for(var i=1;i<=total;i++){
-    doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150,150,150);
-    doc.text('หน้า '+i+'/'+total,105,290,{align:'center'});
-  }
+  html += '<div class="footer">Copyright &copy; 2026 ระบบบันทึกคะแนนพฤติกรรม | โรงเรียนบ้านสวนวิทยาคม</div>';
+  html += '<br><div style="text-align:center"><button onclick="window.print()" style="padding:8px 24px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:14px;font-family:Sarabun;cursor:pointer">🖨️ พิมพ์ / บันทึก PDF</button></div>';
+  html += '</body></html>';
 
-  var fname=type==='all'?'รายงานทั้งหมด':type==='class'?'ห้อง_'+cls.replace('/','_'):students[0].name;
-  doc.save(fname+'_คะแนนพฤติกรรม.pdf');
-  toast('success','สร้าง PDF สำเร็จ','');
+  win.document.write(html);
+  win.document.close();
 }
 
 function exportCSV(){
