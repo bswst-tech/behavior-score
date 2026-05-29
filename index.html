@@ -748,40 +748,47 @@ function doRecordScore(val){
   var stu = APP.students.find(function(s){return s.id===val.sid;});
   if(!stu){ toast('error','ไม่พบนักเรียน'); return; }
 
-  var updates = {};
-  var newBehavior = Number(stu.score);
-  var newVolunteer = Number(stu.volunteer||0);
   var now = fmtDate();
+  var isVol = val.typeName==='จิตอาสา';
+  var field = isVol ? 'volunteer' : 'score';
 
-  if(val.typeName==='จิตอาสา'){
-    // คะแนนจิตอาสา — สะสมไม่มีขีดจำกัด
-    newVolunteer = newVolunteer + val.delta;
-    updates['students/'+val.sid+'/volunteer'] = newVolunteer;
-  } else {
-    // คะแนนพฤติกรรม — อยู่ใน 0-100
-    newBehavior = Math.max(0, Math.min(100, newBehavior + val.delta));
-    updates['students/'+val.sid+'/score'] = newBehavior;
-  }
+  // อ่านค่าจาก Firebase โดยตรง เพื่อป้องกัน cache ไม่ตรง
+  db.ref('students/'+val.sid+'/'+field).once('value').then(function(snap){
+    var cur = snap.exists() ? Number(snap.val()) : (isVol ? 0 : 100);
+    var nv;
+    if(isVol){
+      nv = cur + val.delta;
+    } else {
+      nv = Math.max(0, Math.min(100, cur + val.delta));
+    }
 
-  db.ref().update(updates).then(function(){
-    var histRef = db.ref('history').push();
-    return histRef.set({
-      studentId:val.sid, name:stu.name, class:stu.class,
-      delta:val.delta, type:val.typeName,
-      scoreType: val.typeName==='จิตอาสา' ? 'volunteer' : 'behavior',
-      reason:val.reason, note:val.note||'', by:APP.displayName,
-      ts:now,
-      scoreAfter: val.typeName==='จิตอาสา' ? newVolunteer : newBehavior
+    // บันทึกคะแนนใหม่
+    return db.ref('students/'+val.sid+'/'+field).set(nv).then(function(){
+      // อัพเดต cache
+      if(isVol) stu.volunteer = nv; else stu.score = nv;
+
+      // บันทึกประวัติ
+      return db.ref('history').push().set({
+        studentId: val.sid,
+        name:      stu.name,
+        class:     stu.class,
+        delta:     val.delta,
+        type:      val.typeName,
+        scoreType: isVol ? 'volunteer' : 'behavior',
+        reason:    val.reason,
+        note:      val.note||'',
+        by:        APP.displayName,
+        ts:        now,
+        scoreAfter: nv
+      });
+    }).then(function(){
+      var msg = isVol
+        ? ('+'+val.delta+' คะแนนจิตอาสา → '+nv+' คะแนน')
+        : ((val.delta>0?'+':'')+val.delta+' คะแนนพฤติกรรม → '+nv+' คะแนน');
+      toast('success','บันทึกสำเร็จ', msg);
+      var active = document.querySelector('.nav-btn.active');
+      if(active) active.click();
     });
-  }).then(function(){
-    stu.score = newBehavior;
-    stu.volunteer = newVolunteer;
-    var msg = val.typeName==='จิตอาสา'
-      ? ('+'+val.delta+' คะแนนจิตอาสา → '+newVolunteer+' คะแนน')
-      : ((val.delta>0?'+':'')+val.delta+' คะแนนพฤติกรรม → '+newBehavior+' คะแนน');
-    toast('success','บันทึกสำเร็จ', msg);
-    var active = document.querySelector('.nav-btn.active');
-    if(active) active.click();
   }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
 }
 
