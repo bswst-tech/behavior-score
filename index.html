@@ -10,8 +10,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{
   --blue-50:#f0f8fc;--blue-100:#cbe8f2;--blue-200:#9dd1e6;
@@ -930,29 +928,30 @@ function openEditHist(histId, type, delta, reason, note, studentId){
 
 function deleteHist(histId, studentId, delta, type){
   Swal.fire({
-    icon:'warning',title:'ยืนยันการลบ',
+    icon:'warning', title:'ยืนยันการลบ',
     text:'ลบรายการนี้? คะแนนจะถูกคืนให้นักเรียนอัตโนมัติ',
-    confirmButtonText:'ลบรายการนี้',confirmButtonColor:'#e53e3e',
-    showCancelButton:true,cancelButtonText:'ยกเลิก'
+    confirmButtonText:'ลบรายการนี้', confirmButtonColor:'#e53e3e',
+    showCancelButton:true, cancelButtonText:'ยกเลิก'
   }).then(function(r){
     if(!r.isConfirmed) return;
-    var field = type==='จิตอาสา'?'volunteer':'score';
-    db.ref('students/'+studentId+'/'+field).once('value').then(function(s){
-      var cur = s.exists()?Number(s.val()):(field==='score'?100:0);
-      // reverse delta: บวกไปก็ลบออก, ลบไปก็บวกคืน
+    var field = (type==='จิตอาสา') ? 'volunteer' : 'score';
+    db.ref('students/'+studentId+'/'+field).once('value').then(function(snap){
+      var cur = snap.exists() ? Number(snap.val()) : (field==='score' ? 100 : 0);
+      // delta ที่เก็บใน history คือค่าจริง เช่น ตัด=-10, เพิ่ม=+5
+      // การ reverse = cur - delta (ลบ delta ออก)
       var nv = field==='score'
         ? Math.max(0, Math.min(100, cur - delta))
         : Math.max(0, cur - delta);
-      var stu = APP.students.find(function(x){return x.id===studentId;});
-      if(stu){if(field==='score')stu.score=nv;else stu.volunteer=nv;}
-      return Promise.all([
-        db.ref('students/'+studentId+'/'+field).set(nv),
-        db.ref('history/'+histId).remove()
-      ]);
+      var stu = APP.students.find(function(x){ return x.id===studentId; });
+      if(stu){ if(field==='score') stu.score=nv; else stu.volunteer=nv; }
+      // update score ก่อน แล้วค่อย remove history
+      return db.ref('students/'+studentId+'/'+field).set(nv);
+    }).then(function(){
+      return db.ref('history/'+histId).remove();
     }).then(function(){
       toast('success','ลบสำเร็จ','คะแนนถูกคืนให้นักเรียนแล้ว');
       loadHistory();
-    }).catch(function(e){toast('error','เกิดข้อผิดพลาด',e.message);});
+    }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
   });
 }
 // ── REPORT ──
@@ -1017,49 +1016,75 @@ function switchTab(id, btn){
 
 // ── PDF EXPORT ──
 function openExportPDF(){
-  var clsOpts = APP.classes.map(function(c){return '<option>'+c+'</option>';}).join('');
+  var clsOpts = APP.classes.map(function(c){ return '<option>'+c+'</option>'; }).join('');
   Swal.fire({
-    title:'Export PDF',
-    html:'<div style="text-align:left">'
-      +'<div class="form-group"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">ประเภทรายงาน</label>'
-      +'<select id="pdfType" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px">'
-      +'<option value="all">ทั้งหมด</option>'
-      +'<option value="class">รายห้อง</option>'
-      +'<option value="student">รายบุคคล</option>'
+    title: 'Export PDF',
+    html: '<div style="text-align:left">'
+      +'<div class="form-group"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">ประเภทรายงาน</label>'
+      +'<select id="pdfType" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid #cbe8f2;border-radius:10px;font-size:14px">'
+      +'<option value="all">📊 ทั้งหมด</option>'
+      +'<option value="class">🏫 รายห้อง</option>'
+      +'<option value="student">👤 รายบุคคล (พร้อมประวัติ)</option>'
       +'</select></div>'
-      +'<div id="pdfClsGrp" style="display:none"><div class="form-group"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">เลือกห้อง</label>'
-      +'<select id="pdfCls" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px">'+clsOpts+'</select></div></div>'
+      +'<div id="pdfClsGrp" style="display:none">'
+      +'<div class="form-group"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">เลือกห้อง</label>'
+      +'<select id="pdfCls" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid #cbe8f2;border-radius:10px;font-size:14px">'+clsOpts+'</select></div>'
+      +'</div>'
       +'<div id="pdfStuGrp" style="display:none">'
-      +'<div class="form-group"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">เลือกชั้นเรียน</label>'
-      +'<select id="pdfStuCls" onchange="pdfUpdateStudents()" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px"><option value="">-- เลือกชั้น --</option>'+clsOpts+'</select></div>'
-      +'<div class="form-group" id="pdfStuNameGrp" style="display:none"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">เลือกนักเรียน</label>'
-      +'<select id="pdfStuSel" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px"><option value="">-- เลือกชื่อ --</option></select></div>'
+      +'<div class="form-group"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">เลือกชั้นเรียน</label>'
+      +'<select id="pdfStuCls" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid #cbe8f2;border-radius:10px;font-size:14px">'
+      +'<option value="">-- เลือกชั้น --</option>'+clsOpts
+      +'</select></div>'
+      +'<div id="pdfStuNameGrp" style="display:none">'
+      +'<div class="form-group"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">เลือกนักเรียน</label>'
+      +'<select id="pdfStuSel" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid #cbe8f2;border-radius:10px;font-size:14px">'
+      +'<option value="">-- เลือกชื่อ --</option>'
+      +'</select></div>'
+      +'</div>'
       +'</div>'
       +'</div>',
-    confirmButtonText:'<i class="ti ti-file-type-pdf"></i> สร้าง PDF',
-    confirmButtonColor:'#e53e3e',
-    showCancelButton:true,cancelButtonText:'ยกเลิก',
-    didOpen:function(){
-      document.getElementById('pdfType').addEventListener('change',function(){
-        var t=this.value;
-        document.getElementById('pdfClsGrp').style.display=t==='class'?'':'none';
-        document.getElementById('pdfStuGrp').style.display=t==='student'?'':'none';
+    confirmButtonText: '<i class="ti ti-file-type-pdf"></i> สร้าง PDF',
+    confirmButtonColor: '#e53e3e',
+    showCancelButton: true, cancelButtonText: 'ยกเลิก',
+    didOpen: function(){
+      var selType = document.getElementById('pdfType');
+      var grpCls  = document.getElementById('pdfClsGrp');
+      var grpStu  = document.getElementById('pdfStuGrp');
+      selType.addEventListener('change', function(){
+        grpCls.style.display = this.value==='class'   ? '' : 'none';
+        grpStu.style.display = this.value==='student' ? '' : 'none';
+      });
+      // เมื่อเลือกชั้น → โหลดชื่อ
+      document.getElementById('pdfStuCls').addEventListener('change', function(){
+        var cls = this.value;
+        var nameGrp = document.getElementById('pdfStuNameGrp');
+        var nameSel = document.getElementById('pdfStuSel');
+        if(!cls){ nameGrp.style.display='none'; return; }
+        var list = APP.students.filter(function(s){ return s.class===cls; })
+          .sort(function(a,b){ return Number(a.no)-Number(b.no); });
+        nameSel.innerHTML = '<option value="">-- เลือกชื่อ --</option>'
+          + list.map(function(s){ return '<option value="'+s.id+'">'+s.no+'. '+s.name+'</option>'; }).join('');
+        nameGrp.style.display = '';
       });
     },
-    preConfirm:function(){
-      var type=document.getElementById('pdfType').value;
-      var cls='',sid='';
+    preConfirm: function(){
+      var type = document.getElementById('pdfType').value;
+      var cls  = '';
+      var sid  = '';
       if(type==='class'){
-        cls=document.getElementById('pdfCls')?document.getElementById('pdfCls').value:'';
-        if(!cls){Swal.showValidationMessage('กรุณาเลือกห้อง');return false;}
+        cls = document.getElementById('pdfCls').value;
+        if(!cls){ Swal.showValidationMessage('กรุณาเลือกห้อง'); return false; }
       }
       if(type==='student'){
-        sid=document.getElementById('pdfStuSel')?document.getElementById('pdfStuSel').value:'';
-        if(!sid){Swal.showValidationMessage('กรุณาเลือกนักเรียน');return false;}
+        sid = document.getElementById('pdfStuSel').value;
+        if(!sid){ Swal.showValidationMessage('กรุณาเลือกนักเรียน'); return false; }
       }
-      return{type,cls,sid};
+      return { type:type, cls:cls, sid:sid };
     }
-  }).then(function(r){if(!r.isConfirmed)return;generatePDF(r.value.type,r.value.cls,r.value.sid);});
+  }).then(function(r){
+    if(!r.isConfirmed) return;
+    generatePDF(r.value.type, r.value.cls, r.value.sid);
+  });
 }
 
 function pdfUpdateStudents(){
@@ -1072,65 +1097,72 @@ function pdfUpdateStudents(){
   grp.style.display='';
 }
 
-function generatePDF(type,cls,sid){
-  if(!window.jspdf){toast('error','ไม่สามารถโหลด jsPDF ได้');return;}
-  var doc=new window.jspdf.jsPDF('p','mm','a4');
-  var students=APP.students.slice();
-  if(type==='class') students=students.filter(function(s){return s.class===cls;});
-  if(type==='student') students=students.filter(function(s){return s.id===sid;});
-  if(!students.length){toast('warning','ไม่พบข้อมูล');return;}
-
-  // Header
-  doc.setFontSize(16);doc.setFont('helvetica','bold');
-  doc.text('รายงานคะแนนพฤติกรรมนักเรียน',105,16,{align:'center'});
-  doc.setFontSize(11);doc.setFont('helvetica','normal');
-  doc.text('โรงเรียนบ้านสวนวิทยาคม  ภาคเรียนที่ 1/2569',105,23,{align:'center'});
-  doc.text('วันที่พิมพ์: '+new Date().toLocaleDateString('th-TH'),105,29,{align:'center'});
-  doc.setDrawColor(41,128,185);doc.setLineWidth(0.5);doc.line(14,32,196,32);
-
-  var map={};
-  students.forEach(function(s){if(!map[s.class])map[s.class]=[];map[s.class].push(s);});
-  var yPos=38;
-
-  Object.keys(map).sort().forEach(function(c){
-    if(yPos>245){doc.addPage();yPos=20;}
-    doc.setFont('helvetica','bold');doc.setFontSize(12);
-    doc.setTextColor(41,128,185);
-    doc.text((type==='student'?'นักเรียน: ':'ชั้น: ')+c,14,yPos);
-    doc.setTextColor(0,0,0);yPos+=5;
-    var rows=map[c].sort(function(a,b){return Number(a.no)-Number(b.no);}).map(function(s){
-      return[String(s.no),s.name,String(s.score),(s.score>=80?'ดี':s.score>=60?'ปานกลาง':'ต้องดูแล'),String(s.volunteer||0)];
-    });
-    doc.autoTable({
-      startY:yPos,
-      head:[['เลขที่','ชื่อ-นามสกุล','คะแนนพฤติกรรม','สถานะ','คะแนนจิตอาสา']],
-      body:rows,theme:'striped',
-      headStyles:{fillColor:[41,128,185],textColor:255,fontSize:10,fontStyle:'bold'},
-      bodyStyles:{fontSize:9},
-      alternateRowStyles:{fillColor:[240,248,252]},
-      columnStyles:{0:{cellWidth:14},1:{cellWidth:72},2:{cellWidth:32},3:{cellWidth:24},4:{cellWidth:30}},
-      margin:{left:14,right:14},
-      didParseCell:function(data){
-        if(data.section==='body'&&data.column.index===3){
-          if(data.cell.raw==='ดี')data.cell.styles.textColor=[29,107,69];
-          else if(data.cell.raw==='ต้องดูแล')data.cell.styles.textColor=[229,62,62];
-          else data.cell.styles.textColor=[122,92,0];
-        }
-      }
-    });
-    yPos=doc.lastAutoTable.finalY+10;
-  });
-
-  // Page numbers
-  var total=doc.internal.getNumberOfPages();
-  for(var i=1;i<=total;i++){
-    doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150,150,150);
-    doc.text('หน้า '+i+'/'+total,105,290,{align:'center'});
+function generatePDF(type, cls, sid){
+  // ─── ถ้า รายบุคคล → ใช้ exportStudentPDF ที่มีประวัติครบ ───
+  if(type==='student'){
+    if(!sid){ toast('warning','กรุณาเลือกนักเรียน'); return; }
+    exportStudentPDF(sid);
+    return;
   }
 
-  var fname=type==='all'?'รายงานทั้งหมด':type==='class'?'ห้อง_'+cls.replace('/','_'):students[0].name;
-  doc.save(fname+'_คะแนนพฤติกรรม.pdf');
-  toast('success','สร้าง PDF สำเร็จ','');
+  // ─── ทั้งหมด / รายห้อง ───
+  var students = APP.students.slice();
+  if(type==='class') students = students.filter(function(s){ return s.class===cls; });
+  if(!students.length){ toast('warning','ไม่พบข้อมูล'); return; }
+
+  var map = {};
+  students.forEach(function(s){
+    if(!map[s.class]) map[s.class] = [];
+    map[s.class].push(s);
+  });
+
+  var win = window.open('','_blank');
+  var h = '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">'
+    +'<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Sarabun,sans-serif;font-size:13px;color:#000;padding:20px}'
+    +'.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #2980b9;padding-bottom:12px}'
+    +'.header h1{font-size:18px;font-weight:700;color:#2980b9}'
+    +'.header p{font-size:12px;color:#555;margin-top:4px}'
+    +'.class-section{margin-bottom:24px;page-break-inside:avoid}'
+    +'.class-title{font-size:15px;font-weight:700;color:#2980b9;margin-bottom:8px;padding:4px 8px;background:#e8f4fd;border-left:4px solid #2980b9}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}'
+    +'thead th{background:#2980b9;color:#fff;padding:7px 10px;text-align:left;font-weight:600}'
+    +'tbody td{padding:6px 10px;border-bottom:1px solid #ddd}'
+    +'tbody tr:nth-child(even){background:#f5f9ff}'
+    +'.good{color:#1d6b45;font-weight:600}.mid{color:#7a5c00;font-weight:600}.bad{color:#e53e3e;font-weight:600}'
+    +'.footer{text-align:center;margin-top:20px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px}'
+    +'@media print{body{padding:10px}button{display:none}}'
+    +'</style></head><body>';
+
+  var title = type==='class' ? 'รายงานคะแนนพฤติกรรม ห้อง '+cls : 'รายงานคะแนนพฤติกรรมนักเรียนทั้งหมด';
+  h += '<div class="header"><h1>'+title+'</h1>';
+  h += '<p>โรงเรียนบ้านสวนวิทยาคม &nbsp;|&nbsp; ภาคเรียนที่ 1 ปีการศึกษา 2569</p>';
+  h += '<p>วันที่พิมพ์: '+new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})+'</p></div>';
+
+  Object.keys(map).sort().forEach(function(c){
+    h += '<div class="class-section"><div class="class-title">ชั้น '+c+' ('+map[c].length+' คน)</div>';
+    h += '<table><thead><tr><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th style="text-align:center">คะแนนพฤติกรรม</th><th>สถานะ</th><th style="text-align:center">คะแนนจิตอาสา</th></tr></thead><tbody>';
+    map[c].sort(function(a,b){ return Number(a.no)-Number(b.no); }).forEach(function(s){
+      var st = s.score>=80
+        ? '<span class="good">ดี</span>'
+        : s.score>=60
+          ? '<span class="mid">ปานกลาง</span>'
+          : '<span class="bad">ต้องดูแล</span>';
+      h += '<tr><td>'+s.no+'</td><td>'+s.name+'</td>';
+      h += '<td style="text-align:center;font-weight:700">'+s.score+'</td>';
+      h += '<td>'+st+'</td>';
+      h += '<td style="text-align:center">⭐ '+(s.volunteer||0)+'</td></tr>';
+    });
+    h += '</tbody></table></div>';
+  });
+
+  h += '<div class="footer">Copyright &copy; 2026 ระบบบันทึกคะแนนพฤติกรรม | โรงเรียนบ้านสวนวิทยาคม</div>';
+  h += '<br><div style="text-align:center"><button onclick="window.print()" style="padding:8px 24px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:14px;font-family:Sarabun;cursor:pointer">🖨️ พิมพ์ / บันทึก PDF</button></div>';
+  h += '</body></html>';
+  win.document.write(h);
+  win.document.close();
 }
 
 function exportCSV(){
@@ -1295,43 +1327,6 @@ function importExcelData(rows){
 
 
 // ── PDF EXPORT ──
-function openExportPDF(){
-  Swal.fire({
-    title:'Export PDF',
-    html:'<div style="text-align:left">'
-      +'<div class="form-group"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">ประเภทรายงาน</label>'
-      +'<select id="pdfType" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px">'
-      +'<option value="all">ทั้งหมด</option>'
-      +'<option value="class">รายห้อง</option>'
-      +'<option value="student">รายบุคคล</option>'
-      +'</select></div>'
-      +'<div class="form-group" id="pdfClsGrp" style="display:none"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">เลือกห้อง</label>'
-      +'<select id="pdfCls" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px">'
-      +APP.classes.map(function(c){return'<option>'+c+'</option>';}).join('')
-      +'</select></div>'
-      +'<div class="form-group" id="pdfStuGrp" style="display:none"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:5px">เลือกนักเรียน</label>'
-      +'<select id="pdfStuSel" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid var(--blue-100);border-radius:var(--radius);font-size:14px">'
-      +APP.students.map(function(s){return'<option value="'+s.id+'">'+s.class+' - '+s.no+'. '+s.name+'</option>';}).join('')
-      +'</select></div></div>',
-    confirmButtonText:'<i class="ti ti-file-type-pdf"></i> สร้าง PDF',
-    confirmButtonColor:'#2980b9',showCancelButton:true,cancelButtonText:'ยกเลิก',
-    didOpen:function(){
-      document.getElementById('pdfType').addEventListener('change',function(){
-        document.getElementById('pdfClsGrp').style.display=this.value==='class'?'':'none';
-        document.getElementById('pdfStuGrp').style.display=this.value==='student'?'':'none';
-        // reload selects dynamically
-        if(this.value==='class'){var s=document.getElementById('pdfCls');s.innerHTML=APP.classes.map(function(c){return'<option>'+c+'</option>';}).join('');}
-        if(this.value==='student'){var s=document.getElementById('pdfStuSel');s.innerHTML=APP.students.map(function(st){return'<option value="'+st.id+'">'+st.class+' - '+st.no+'. '+st.name+'</option>';}).join('');}
-      });
-    },
-    preConfirm:function(){
-      var type=document.getElementById('pdfType').value;
-      var cls=type==='class'&&document.getElementById('pdfCls')?document.getElementById('pdfCls').value:'';
-      var sid=type==='student'&&document.getElementById('pdfStuSel')?document.getElementById('pdfStuSel').value:'';
-      return{type,cls,sid};
-    }
-  }).then(function(r){if(!r.isConfirmed)return;generatePDF(r.value.type,r.value.cls,r.value.sid);});
-}
 
 
 // ── EXPORT PDF รายบุคคล (พร้อมประวัติ) ──
