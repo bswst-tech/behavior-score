@@ -295,24 +295,49 @@ function fmtDate(){
 }
 
 // ── LOAD STUDENTS ──
+// ── REALTIME LISTENER ──
+var _studentsListenerOn = false;
+
 function loadStudents(callback){
-  db.ref('students').once('value').then(function(snap){
-    var students = [];
-    if(snap.exists()){
-      snap.forEach(function(child){
-        var d = child.val();
-        students.push({
-          id:child.key, no:d.no, name:d.name, class:d.class,
-          score:d.score !== undefined ? d.score : 100,      // คะแนนพฤติกรรม (0-100)
-          volunteer:d.volunteer !== undefined ? d.volunteer : 0  // คะแนนจิตอาสา (สะสม)
+  if(!_studentsListenerOn){
+    _studentsListenerOn = true;
+    // ใช้ on('value') แทน once → รับ update realtime ทันที
+    db.ref('students').on('value', function(snap){
+      var students = [];
+      if(snap.exists()){
+        snap.forEach(function(child){
+          var d = child.val();
+          students.push({
+            id:child.key, no:d.no, name:d.name, class:d.class,
+            score:    d.score     !== undefined ? d.score     : 100,
+            volunteer:d.volunteer !== undefined ? d.volunteer : 0
+          });
         });
-      });
-    }
-    students.sort(function(a,b){ return Number(a.no)-Number(b.no); });
-    APP.students = students;
-    APP.classes  = Array.from(new Set(students.map(function(s){return s.class;}))).sort();
-    if(callback) callback(students);
-  });
+      }
+      students.sort(function(a,b){ return Number(a.no)-Number(b.no); });
+      APP.students = students;
+      APP.classes  = Array.from(new Set(students.map(function(s){return s.class;}))).sort();
+
+      // ถ้าเป็น student login → อัพเดต stuData ด้วย
+      if(APP.role==='student' && APP.user){
+        var updated = students.find(function(s){ return s.id===APP.user; });
+        if(updated){
+          APP.stuData = updated;
+          // re-render หน้าคะแนนของฉัน ถ้ากำลังแสดงอยู่
+          var active = document.querySelector('.nav-btn.active');
+          if(active && active.textContent.includes('คะแนนของฉัน')){
+            renderMyScore();
+          }
+        }
+      }
+
+      // callback ครั้งแรก
+      if(callback){ callback(students); callback=null; }
+    });
+  } else {
+    // listener เปิดอยู่แล้ว → คืน data ปัจจุบันทันที
+    if(callback) callback(APP.students);
+  }
 }
 
 // ── LOGIN ──
@@ -379,6 +404,9 @@ function doStudentLogin(){
 }
 
 function doLogout(){
+  // ปิด realtime listener ก่อน logout
+  db.ref('students').off('value');
+  _studentsListenerOn = false;
   APP = {role:'', user:'', displayName:'', students:[], classes:[], stuData:null};
   $('mainApp').style.display = 'none';
   $('loginScreen').style.display = 'flex';
@@ -801,6 +829,8 @@ function doRecordScore(val){
         ? ('+'+val.delta+' คะแนนจิตอาสา → '+nv+' คะแนน')
         : ((val.delta>0?'+':'')+val.delta+' คะแนนพฤติกรรม → '+nv+' คะแนน');
       toast('success','บันทึกสำเร็จ', msg);
+      // realtime listener จะ update APP.students อัตโนมัติ
+      // แต่ force re-render page ปัจจุบันด้วยเพื่อความแน่ใจ
       var active = document.querySelector('.nav-btn.active');
       if(active) active.click();
     });
@@ -1200,6 +1230,11 @@ function exportCSV(){
 
 // ── STUDENT VIEW ──
 function renderMyScore(){
+  // โหลด stuData ล่าสุดจาก APP.students (realtime synced)
+  if(APP.role==='student' && APP.user){
+    var fresh = APP.students.find(function(s){ return s.id===APP.user; });
+    if(fresh) APP.stuData = fresh;
+  }
   var stu = APP.stuData; if(!stu) return;
   var score = Number(stu.score);
   var vol   = Number(stu.volunteer||0);
