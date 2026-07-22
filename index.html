@@ -270,8 +270,6 @@ var USERS = {
 // ── STATE ──
 var APP = {role:'', user:'', displayName:'', students:[], classes:[], stuData:null};
 var _stype = 1, _imgB64 = '', _imgMime = '', _imgName = '';
-var _histCache = [];   // เก็บ list ประวัติปัจจุบันไว้ให้ export ใช้
-var _expFormat = 'pdf';
 
 // ── HELPERS ──
 function $(id){ return document.getElementById(id); }
@@ -473,7 +471,9 @@ function renderDashboard(){
 
       var h = '<div class="container">';
       h += '<div class="section-header"><div><h2 style="margin:0">ภาพรวมคะแนนพฤติกรรม</h2><div class="text-muted">ภาคเรียนที่ 1 ปีการศึกษา 2569</div></div>';
-      h += '<button class="btn btn-blue" onclick="showAddScorePanel()"><i class="ti ti-plus"></i> บันทึกคะแนน</button></div>';
+      h += '<button class="btn btn-blue" onclick="showAddScorePanel()"><i class="ti ti-plus"></i> บันทึกคะแนน</button>';
+    if(APP.role==='admin') h += '<button class="btn btn-yellow" onclick="recalculateAll()" style="margin-left:8px"><i class="ti ti-refresh"></i> คำนวณคะแนนใหม่</button>';
+    h += '</div>';
       h += '<div class="grid-4" style="margin-bottom:1.25rem">';
       h += '<div class="stat-card"><div class="stat-icon si-blue"><i class="ti ti-users"></i></div><div><div class="stat-num">'+total+'</div><div class="stat-label">นักเรียนทั้งหมด</div></div></div>';
       h += '<div class="stat-card"><div class="stat-icon si-yellow"><i class="ti ti-star"></i></div><div><div class="stat-num">'+avg+'</div><div class="stat-label">คะแนนเฉลี่ย</div></div></div>';
@@ -791,6 +791,27 @@ function openScoreModal(sid){
   }).then(function(r){ if(r.isConfirmed && r.value) doRecordScore(r.value); });
 }
 
+function calcScoreFromHistory(sid, isVol, callback){
+  // คำนวณคะแนนจากประวัติจริงทั้งหมด ป้องกันคะแนนค้างผิดใน Firebase
+  db.ref('history').orderByChild('studentId').equalTo(sid).once('value').then(function(snap){
+    var behavior = 100, volunteer = 0;
+    if(snap.exists()){
+      var entries = [];
+      snap.forEach(function(c){ entries.push(c.val()); });
+      // เรียงตาม timestamp
+      entries.sort(function(a,b){ return (a.ts||'') < (b.ts||'') ? -1 : 1; });
+      entries.forEach(function(h){
+        if(h.scoreType==='volunteer'){
+          volunteer = Math.max(0, volunteer + h.delta);
+        } else {
+          behavior = Math.max(0, Math.min(100, behavior + h.delta));
+        }
+      });
+    }
+    callback(isVol ? volunteer : behavior);
+  });
+}
+
 function doRecordScore(val){
   var stu = APP.students.find(function(s){return s.id===val.sid;});
   if(!stu){ toast('error','ไม่พบนักเรียน'); return; }
@@ -799,46 +820,42 @@ function doRecordScore(val){
   var isVol = val.typeName==='จิตอาสา';
   var field = isVol ? 'volunteer' : 'score';
 
-  // อ่านค่าจาก Firebase โดยตรง เพื่อป้องกัน cache ไม่ตรง
-  db.ref('students/'+val.sid+'/'+field).once('value').then(function(snap){
-    var cur = snap.exists() ? Number(snap.val()) : (isVol ? 0 : 100);
+  // คำนวณคะแนนจาก history จริง แล้วค่อย +delta
+  // วิธีนี้ป้องกันคะแนนค้างผิดจากการ sync ผิดพลาดในอดีต
+  calcScoreFromHistory(val.sid, isVol, function(curFromHistory){
     var nv;
     if(isVol){
-      nv = cur + val.delta;
+      nv = Math.max(0, curFromHistory + val.delta);
     } else {
-      nv = Math.max(0, Math.min(100, cur + val.delta));
+      nv = Math.max(0, Math.min(100, curFromHistory + val.delta));
     }
 
-    // บันทึกคะแนนใหม่
-    return db.ref('students/'+val.sid+'/'+field).set(nv).then(function(){
-      // อัพเดต cache
-      if(isVol) stu.volunteer = nv; else stu.score = nv;
-
-      // บันทึกประวัติ
-      return db.ref('history').push().set({
-        studentId: val.sid,
-        name:      stu.name,
-        class:     stu.class,
-        delta:     val.delta,
-        type:      val.typeName,
-        scoreType: isVol ? 'volunteer' : 'behavior',
-        reason:    val.reason,
-        note:      val.note||'',
-        by:        APP.displayName,
-        ts:        now,
-        scoreAfter: nv
-      });
+    // บันทึกประวัติก่อน
+    db.ref('history').push().set({
+      studentId: val.sid,
+      name:      stu.name,
+      class:     stu.class,
+      delta:     val.delta,
+      type:      val.typeName,
+      scoreType: isVol ? 'volunteer' : 'behavior',
+      reason:    val.reason,
+      note:      val.note||'',
+      by:        APP.displayName,
+      ts:        now,
+      scoreAfter: nv
     }).then(function(){
+      // แล้วค่อย set คะแนนที่คำนวณจาก history
+      return db.ref('students/'+val.sid+'/'+field).set(nv);
+    }).then(function(){
+      if(isVol) stu.volunteer = nv; else stu.score = nv;
       var msg = isVol
         ? ('+'+val.delta+' คะแนนจิตอาสา → '+nv+' คะแนน')
         : ((val.delta>0?'+':'')+val.delta+' คะแนนพฤติกรรม → '+nv+' คะแนน');
       toast('success','บันทึกสำเร็จ', msg);
-      // realtime listener จะ update APP.students อัตโนมัติ
-      // แต่ force re-render page ปัจจุบันด้วยเพื่อความแน่ใจ
       var active = document.querySelector('.nav-btn.active');
       if(active) active.click();
     });
-  }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
+  });
 }
 
 // ── STUDENT DETAIL ──
@@ -882,8 +899,6 @@ function loadHistory(){
     if(snap.exists()) snap.forEach(function(c){ allHist.unshift(Object.assign({id:c.key}, c.val())); });
     // admin เห็นทั้งหมด, ครูเห็นเฉพาะของตัวเอง
     var hist = APP.role==='admin' ? allHist : allHist.filter(function(h){ return h.by===APP.displayName; });
-    var hist = APP.role==='admin' ? allHist : allHist.filter(function(h){ return h.by===APP.displayName; });
-    _histCache = hist;
     var h = '<div class="container">';
     h += '<div class="section-header"><div><h2 style="margin:0">ประวัติการบันทึกคะแนน</h2>';
     h += APP.role==='admin'
@@ -894,9 +909,7 @@ function loadHistory(){
     h += '<button class="btn btn-sm" onclick="filterHistType(\'จิตอาสา\')">⭐ จิตอาสา</button>';
     h += '<button class="btn btn-sm" onclick="filterHistType(\'ปรับพฤติกรรม\')">🔄 ปรับพฤติกรรม</button>';
     h += '<button class="btn btn-sm" onclick="filterHistType(\'ตัดคะแนน\')">✂️ ตัดคะแนน</button>';
-    h += '</div>';
-    h += '<button class="btn btn-red" onclick="openExportHistoryModal()"><i class="ti ti-download"></i> Export</button>';
-    h += '</div>';
+    h += '</div></div>';
     h += '<div class="search-box" style="margin-bottom:1rem"><i class="ti ti-search"></i><input id="histSearch" placeholder="ค้นหาชื่อ เหตุผล ผู้บันทึก..." oninput="filterHistSearch()"></div>';
     h += '<div class="card" style="padding:0"><div class="table-wrap"><table id="histTbl">';
     h += '<thead><tr><th>วันที่-เวลา</th><th>ชื่อนักเรียน</th><th>ห้อง</th><th>ประเภท</th><th>คะแนน</th><th>เหตุผล</th><th>บันทึกโดย</th><th style="text-align:right">จัดการ</th></tr></thead><tbody>';
@@ -1013,123 +1026,6 @@ function deleteHist(histId, studentId, delta, type){
       loadHistory();
     }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
   });
-}
-// ── EXPORT ประวัติการบันทึกคะแนน ──
-function openExportHistoryModal(){
-  if(!_histCache.length){ toast('warning','ไม่มีข้อมูลให้ export'); return; }
-  Swal.fire({
-    title:'Export ประวัติการบันทึกคะแนน',
-    html:'<div style="text-align:left">'
-      +'<div class="form-group"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">ประเภทที่ต้องการ export</label>'
-      +'<select id="expType" style="font-family:Sarabun;width:100%;padding:9px 12px;border:1.5px solid #cbe8f2;border-radius:10px;font-size:14px">'
-      +'<option value="all">📋 ทั้งหมด</option>'
-      +'<option value="จิตอาสา">⭐ จิตอาสา</option>'
-      +'<option value="ปรับพฤติกรรม">🔄 ปรับพฤติกรรม</option>'
-      +'<option value="ตัดคะแนน">✂️ ตัดคะแนน</option>'
-      +'</select></div>'
-      +'<div class="form-group"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">รูปแบบไฟล์</label>'
-      +'<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
-      +'<button type="button" id="expBtnPdf" class="btn" style="flex:1;min-width:90px" onclick="setExpFormat(\'pdf\')"><i class="ti ti-file-type-pdf"></i> PDF</button>'
-      +'<button type="button" id="expBtnXlsx" class="btn" style="flex:1;min-width:90px" onclick="setExpFormat(\'xlsx\')"><i class="ti ti-file-spreadsheet"></i> Excel</button>'
-      +'<button type="button" id="expBtnCsv" class="btn" style="flex:1;min-width:90px" onclick="setExpFormat(\'csv\')"><i class="ti ti-file-text"></i> CSV</button>'
-      +'</div></div>'
-      +'</div>',
-    confirmButtonText:'<i class="ti ti-download"></i> Export',
-    confirmButtonColor:'#2980b9',
-    showCancelButton:true, cancelButtonText:'ยกเลิก',
-    didOpen:function(){ setExpFormat('pdf'); },
-    preConfirm:function(){
-      return { type: document.getElementById('expType').value, format: _expFormat };
-    }
-  }).then(function(r){
-    if(!r.isConfirmed) return;
-    var filtered = r.value.type==='all'
-      ? _histCache
-      : _histCache.filter(function(h){ return h.type===r.value.type; });
-    if(!filtered.length){ toast('warning','ไม่พบข้อมูลตามเงื่อนไขที่เลือก'); return; }
-    if(r.value.format==='pdf')  exportHistoryPDF(filtered, r.value.type);
-    else if(r.value.format==='xlsx') exportHistoryXLSX(filtered, r.value.type);
-    else exportHistoryCSV(filtered, r.value.type);
-  });
-}
-
-function setExpFormat(f){
-  _expFormat = f;
-  ['Pdf','Xlsx','Csv'].forEach(function(k){
-    var btn = document.getElementById('expBtn'+k);
-    if(!btn) return;
-    var active = k.toLowerCase()===f;
-    btn.className = active ? 'btn btn-red' : 'btn';
-  });
-}
-
-function exportHistoryPDF(list, typeLabel){
-  var win = window.open('','_blank');
-  var titleType = typeLabel==='all' ? 'ทั้งหมด' : typeLabel;
-  var h = '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">'
-    +'<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">'
-    +'<style>'
-    +'*{box-sizing:border-box;margin:0;padding:0}'
-    +'body{font-family:Sarabun,sans-serif;font-size:12px;color:#000;padding:20px}'
-    +'.header{text-align:center;margin-bottom:18px;border-bottom:2px solid #2980b9;padding-bottom:12px}'
-    +'.header h1{font-size:17px;font-weight:700;color:#2980b9}'
-    +'.header p{font-size:12px;color:#555;margin-top:4px}'
-    +'table{width:100%;border-collapse:collapse;font-size:11px}'
-    +'thead th{background:#2980b9;color:#fff;padding:6px 8px;text-align:left;font-weight:600}'
-    +'tbody td{padding:5px 8px;border-bottom:1px solid #ddd}'
-    +'tbody tr:nth-child(even){background:#f5f9ff}'
-    +'.plus{color:#1d6b45;font-weight:700}.minus{color:#e53e3e;font-weight:700}'
-    +'.footer{text-align:center;margin-top:18px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px}'
-    +'@media print{body{padding:10px}button{display:none}}'
-    +'</style></head><body>';
-  h += '<div class="header"><h1>รายงานประวัติการบันทึกคะแนนพฤติกรรม ('+titleType+')</h1>';
-  h += '<p>โรงเรียนบ้านสวนวิทยาคม &nbsp;|&nbsp; ภาคเรียนที่ 1 ปีการศึกษา 2569</p>';
-  h += '<p>วันที่พิมพ์: '+new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})+' &nbsp;|&nbsp; จำนวน '+list.length+' รายการ</p></div>';
-  h += '<table><thead><tr><th>วันที่-เวลา</th><th>ชื่อนักเรียน</th><th>ห้อง</th><th>ประเภท</th><th>คะแนน</th><th>เหตุผล</th><th>หมายเหตุ</th><th>บันทึกโดย</th></tr></thead><tbody>';
-  list.forEach(function(hh){
-    var plus = hh.delta > 0;
-    h += '<tr><td style="white-space:nowrap">'+hh.ts+'</td><td>'+hh.name+'</td><td>'+hh.class+'</td><td>'+hh.type+'</td>';
-    h += '<td><span class="'+(plus?'plus':'minus')+'">'+(plus?'+':'')+hh.delta+'</span></td>';
-    h += '<td>'+hh.reason+'</td><td>'+(hh.note||'')+'</td><td>'+hh.by+'</td></tr>';
-  });
-  h += '</tbody></table>';
-  h += '<div class="footer">Copyright &copy; 2026 ระบบบันทึกคะแนนพฤติกรรม | โรงเรียนบ้านสวนวิทยาคม</div>';
-  h += '<br><div style="text-align:center"><button onclick="window.print()" style="padding:8px 24px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:14px;font-family:Sarabun;cursor:pointer">🖨️ พิมพ์ / บันทึก PDF</button></div>';
-  h += '</body></html>';
-  win.document.write(h);
-  win.document.close();
-}
-
-function exportHistoryCSV(list, typeLabel){
-  var csv = '\uFEFF' + 'วันที่-เวลา,ชื่อนักเรียน,ห้อง,ประเภท,คะแนน,เหตุผล,หมายเหตุ,บันทึกโดย\n';
-  list.forEach(function(hh){
-    csv += '"'+hh.ts+'","'+hh.name+'","'+hh.class+'","'+hh.type+'",'+hh.delta
-      +',"'+(hh.reason||'').replace(/"/g,'""')+'","'+(hh.note||'').replace(/"/g,'""')+'","'+hh.by+'"\n';
-  });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
-  a.download = 'ประวัติคะแนน_'+(typeLabel==='all'?'ทั้งหมด':typeLabel)+'.csv';
-  a.click();
-}
-
-function exportHistoryXLSX(list, typeLabel){
-  var rows = list.map(function(hh){
-    return {
-      'วันที่-เวลา': hh.ts,
-      'ชื่อนักเรียน': hh.name,
-      'ห้อง': hh.class,
-      'ประเภท': hh.type,
-      'คะแนน': hh.delta,
-      'เหตุผล': hh.reason,
-      'หมายเหตุ': hh.note||'',
-      'บันทึกโดย': hh.by
-    };
-  });
-  var ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:18},{wch:22},{wch:10},{wch:14},{wch:8},{wch:25},{wch:25},{wch:16}];
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'ประวัติคะแนน');
-  XLSX.writeFile(wb, 'ประวัติคะแนน_'+(typeLabel==='all'?'ทั้งหมด':typeLabel)+'.xlsx');
 }
 // ── REPORT ──
 function loadReport(){
@@ -1621,6 +1517,79 @@ function exportStudentPDF(sid){
   }).catch(function(e){ Swal.close(); toast('error','เกิดข้อผิดพลาด',e.message); });
 }
 
+
+// ── RECALCULATE ALL SCORES FROM HISTORY ──
+function recalculateAll(){
+  Swal.fire({
+    icon:'warning',
+    title:'คำนวณคะแนนใหม่ทั้งหมด',
+    html:'<div style="text-align:left;font-size:14px">'
+      +'ระบบจะคำนวณคะแนนพฤติกรรมและจิตอาสา<br>'
+      +'ของนักเรียนทุกคนใหม่จากประวัติจริง<br><br>'
+      +'<span style="color:var(--red-600);font-weight:600">ใช้เวลาสักครู่ กรุณารอจนเสร็จ</span>'
+      +'</div>',
+    confirmButtonText:'เริ่มคำนวณ',
+    confirmButtonColor:'#2980b9',
+    showCancelButton:true,
+    cancelButtonText:'ยกเลิก'
+  }).then(function(r){
+    if(!r.isConfirmed) return;
+    Swal.fire({
+      title:'กำลังคำนวณ...',
+      html:'<div id="rcProgress">0 / 0 คน</div>',
+      allowOutsideClick:false,
+      showConfirmButton:false,
+      didOpen:function(){ Swal.showLoading(); }
+    });
+
+    // ดึง history ทั้งหมดก่อน
+    db.ref('history').once('value').then(function(hSnap){
+      // จัดกลุ่มตาม studentId
+      var byStudent = {};
+      if(hSnap.exists()){
+        hSnap.forEach(function(c){
+          var h = c.val();
+          if(!byStudent[h.studentId]) byStudent[h.studentId] = [];
+          byStudent[h.studentId].push(h);
+        });
+      }
+
+      // คำนวณคะแนนแต่ละคน
+      var updates = {};
+      var ids = Object.keys(byStudent);
+      // เรียง history ตาม ts แล้วคำนวณ
+      ids.forEach(function(sid){
+        var entries = byStudent[sid];
+        entries.sort(function(a,b){ return (a.ts||'') < (b.ts||'') ? -1 : 1; });
+        var behavior = 100, volunteer = 0;
+        entries.forEach(function(h){
+          if(h.scoreType==='volunteer'){
+            volunteer = Math.max(0, volunteer + h.delta);
+          } else {
+            behavior = Math.max(0, Math.min(100, behavior + h.delta));
+          }
+        });
+        updates['students/'+sid+'/score'] = behavior;
+        updates['students/'+sid+'/volunteer'] = volunteer;
+      });
+
+      // อัพเดต Firebase พร้อมกัน
+      var el = document.getElementById('rcProgress');
+      if(el) el.textContent = 'อัพเดต '+ids.length+' คน...';
+
+      return db.ref().update(updates);
+    }).then(function(){
+      Swal.fire({
+        icon:'success',
+        title:'คำนวณเสร็จแล้ว',
+        text:'คะแนนทุกคนถูกอัพเดตจากประวัติจริงแล้ว',
+        confirmButtonColor:'#2980b9'
+      });
+    }).catch(function(e){
+      Swal.fire({icon:'error',title:'เกิดข้อผิดพลาด',text:e.message});
+    });
+  });
+}
 // ── EVENT LISTENERS ──
 document.getElementById('loginBtn').addEventListener('click', doLogin);
 document.getElementById('loginPass').addEventListener('keypress', function(e){ if(e.key==='Enter') doLogin(); });
