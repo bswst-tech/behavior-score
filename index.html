@@ -792,21 +792,27 @@ function openScoreModal(sid){
 }
 
 function calcScoreFromHistory(sid, isVol, callback){
-  // คำนวณคะแนนจากประวัติจริงทั้งหมด ป้องกันคะแนนค้างผิดใน Firebase
-  db.ref('history').orderByChild('studentId').equalTo(sid).once('value').then(function(snap){
+  // ดึง history ทั้งหมดแล้ว filter เอง (ไม่ใช้ orderByChild เพราะต้องการ index)
+  db.ref('history').once('value').then(function(snap){
     var behavior = 100, volunteer = 0;
     if(snap.exists()){
       var entries = [];
-      snap.forEach(function(c){ entries.push(c.val()); });
-      // เรียงตาม timestamp
+      snap.forEach(function(c){
+        var h = c.val();
+        if(h.studentId === sid) entries.push(h);
+      });
+      // เรียงตาม timestamp ก่อนคำนวณ
       entries.sort(function(a,b){ return (a.ts||'') < (b.ts||'') ? -1 : 1; });
       entries.forEach(function(h){
         if(h.scoreType==='volunteer'){
           volunteer = Math.max(0, volunteer + h.delta);
         } else {
-          behavior = Math.max(0, Math.min(100, behavior + h.delta));
+          // ไม่ clamp ระหว่างทาง เพื่อให้คะแนนสะท้อนความเป็นจริง
+          behavior = behavior + h.delta;
         }
       });
+      // clamp ครั้งเดียวตอนท้าย
+      behavior = Math.max(0, Math.min(100, behavior));
     }
     callback(isVol ? volunteer : behavior);
   });
@@ -1564,11 +1570,14 @@ function recalculateAll(){
         var behavior = 100, volunteer = 0;
         entries.forEach(function(h){
           if(h.scoreType==='volunteer'){
-            volunteer = Math.max(0, volunteer + h.delta);
+            volunteer = volunteer + h.delta;
           } else {
-            behavior = Math.max(0, Math.min(100, behavior + h.delta));
+            behavior = behavior + h.delta;
           }
         });
+        // clamp ครั้งเดียวตอนท้าย
+        behavior = Math.max(0, Math.min(100, behavior));
+        volunteer = Math.max(0, volunteer);
         updates['students/'+sid+'/score'] = behavior;
         updates['students/'+sid+'/volunteer'] = volunteer;
       });
