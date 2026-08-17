@@ -696,8 +696,8 @@ function buildScoreForm(sid){
     +'<div id="fPresets" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">'
     +PRESET_VOLUNTEER.map(function(p){return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' (+'+p.v+')</button>';}).join('')
     +'</div></div>'
-    +'<div id="fDeltaWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">'
-    +'<div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน</label><input id="fDelta" type="number" value="1" min="1" max="100" style="font-family:Sarabun"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">'
+    +'<div id="fDeltaWrap"><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">คะแนน</label><input id="fDelta" type="number" value="1" min="1" max="100" style="font-family:Sarabun"></div>'
     +'<div><label style="font-size:13px;font-weight:500;display:block;margin-bottom:4px">เหตุผล</label><input id="fReason" type="text" placeholder="ระบุเหตุผล" style="font-family:Sarabun"></div>'
     +'</div>'
     +'<div class="form-group"><label>หมายเหตุ (ไม่บังคับ)</label><textarea id="fNote" rows="2" style="font-family:Sarabun" placeholder="รายละเอียดเพิ่มเติม..."></textarea></div>'
