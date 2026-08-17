@@ -784,8 +784,20 @@ function showAddScorePanel(){
 }
 
 function submitFromPanel(){
-  var val = collectForm(); if(!val) return;
-  doRecordScore(val);
+  // validate เองเพราะไม่อยู่ใน Swal context
+  var sidEl = document.getElementById('fSid');
+  var sid = sidEl ? sidEl.value : '';
+  var reason = (document.getElementById('fReason')||{}).value||'';
+  var delta = parseInt((document.getElementById('fDelta')||{}).value) || 0;
+
+  if(!sid){ toast('warning','กรุณาเลือกนักเรียน'); return; }
+  if(!reason.trim()){ toast('warning','กรุณาระบุเหตุผล'); return; }
+  if(_stype!=='lea' && delta<=0){ toast('warning','กรุณาระบุจำนวนคะแนน'); return; }
+
+  var actualDelta = _stype==='min' ? -delta : _stype==='lea' ? 0 : delta;
+  var typeName = _stype==='vol' ? 'จิตอาสา' : _stype==='imp' ? 'ปรับพฤติกรรม' : _stype==='lea' ? 'ลา' : 'ตัดคะแนน';
+  var note = (document.getElementById('fNote')||{}).value||'';
+  doRecordScore({sid:sid, delta:actualDelta, reason:reason.trim(), note:note.trim(), typeName:typeName});
 }
 
 function openScoreModal(sid){
