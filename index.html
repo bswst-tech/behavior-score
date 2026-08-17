@@ -766,8 +766,9 @@ function collectForm(){
   var reason = document.getElementById('fReason').value.trim();
   var note   = document.getElementById('fNote').value.trim();
   if(!sid)    { Swal.showValidationMessage('กรุณาเลือกนักเรียน'); return false; }
-  if(!reason) { Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
+  if(_stype!=='lea' && !reason) { Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
   if(_stype!=='lea' && delta<=0){ Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน'); return false; }
+  if(_stype==='lea' && !reason.trim()) reason = 'ลา';
   var actualDelta = _stype==='min' ? -delta : _stype==='lea' ? 0 : delta;
   var typeName = _stype==='vol' ? 'จิตอาสา' : _stype==='imp' ? 'ปรับพฤติกรรม' : _stype==='lea' ? 'ลา' : 'ตัดคะแนน';
   return {sid:sid, delta:actualDelta, reason:reason, note:note, typeName:typeName};
@@ -791,9 +792,11 @@ function submitFromPanel(){
   var delta = parseInt((document.getElementById('fDelta')||{}).value) || 0;
 
   if(!sid){ toast('warning','กรุณาเลือกนักเรียน'); return; }
-  if(!reason.trim()){ toast('warning','กรุณาระบุเหตุผล'); return; }
+  if(_stype!=='lea' && !reason.trim()){ toast('warning','กรุณาระบุเหตุผล'); return; }
+  if(_stype==='lea' && !reason.trim()) reason = 'ลา';
   if(_stype!=='lea' && delta<=0){ toast('warning','กรุณาระบุจำนวนคะแนน'); return; }
 
+  if(_stype==='lea' && !reason.trim()) reason = 'ลา';
   var actualDelta = _stype==='min' ? -delta : _stype==='lea' ? 0 : delta;
   var typeName = _stype==='vol' ? 'จิตอาสา' : _stype==='imp' ? 'ปรับพฤติกรรม' : _stype==='lea' ? 'ลา' : 'ตัดคะแนน';
   var note = (document.getElementById('fNote')||{}).value||'';
