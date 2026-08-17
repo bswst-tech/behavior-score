@@ -218,6 +218,7 @@ firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
 
 // ── CONFIG ──
+var PRESET_LEAVE = [];
 var PRESET_VOLUNTEER = [
   {l:'จิตอาสา',v:5},
   {l:'จิตอาสา',v:10},
@@ -726,18 +727,23 @@ function setSType(t){
   bm.className='btn'; bm.style.cssText='flex:1;min-width:120px;color:var(--red-600);border-color:var(--red-100)';
 
   var presets = [];
+  var bl = document.getElementById('fBtnLea');
+  if(bl){ bl.className='btn'; bl.style.cssText='flex:1;min-width:120px;color:#7c3aed;border-color:#ddd6fe'; }
   if(t==='vol'){
     bv.className='btn btn-green'; bv.style.cssText='flex:1;min-width:120px';
     presets = PRESET_VOLUNTEER;
   } else if(t==='imp'){
     bi.className='btn btn-blue'; bi.style.cssText='flex:1;min-width:120px';
     presets = PRESET_IMPROVE;
+  } else if(t==='lea'){
+    if(bl){ bl.className='btn'; bl.style.cssText='flex:1;min-width:120px;background:#ede9fe;color:#5b21b6;border-color:#c4b5fd'; }
+    presets = PRESET_LEAVE;
   } else {
     bm.className='btn btn-red'; bm.style.cssText='flex:1;min-width:120px';
     presets = PRESET_MINUS;
   }
 
-  var sign = t==='min' ? '-' : '+';
+  var sign = t==='min' ? '-' : t==='lea' ? '' : '+';
   document.getElementById('fPresets').innerHTML = presets.map(function(p){
     return '<button type="button" class="chip" onclick="pickPreset(\''+p.l+'\','+p.v+')">'+p.l+' ('+sign+p.v+')</button>';
   }).join('');
@@ -756,9 +762,9 @@ function collectForm(){
   var note   = document.getElementById('fNote').value.trim();
   if(!sid)    { Swal.showValidationMessage('กรุณาเลือกนักเรียน'); return false; }
   if(!reason) { Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
-  if(delta<=0){ Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน'); return false; }
-  var actualDelta = _stype==='min' ? -delta : delta;
-  var typeName = _stype==='vol' ? 'จิตอาสา' : _stype==='imp' ? 'ปรับพฤติกรรม' : 'ตัดคะแนน';
+  if(_stype!=='lea' && delta<=0){ Swal.showValidationMessage('กรุณาระบุจำนวนคะแนน'); return false; }
+  var actualDelta = _stype==='min' ? -delta : _stype==='lea' ? 0 : delta;
+  var typeName = _stype==='vol' ? 'จิตอาสา' : _stype==='imp' ? 'ปรับพฤติกรรม' : _stype==='lea' ? 'ลา' : 'ตัดคะแนน';
   return {sid:sid, delta:actualDelta, reason:reason, note:note, typeName:typeName};
 }
 
@@ -825,6 +831,28 @@ function doRecordScore(val){
   var now = fmtDate();
   var isVol = val.typeName==='จิตอาสา';
   var field = isVol ? 'volunteer' : 'score';
+
+  // ถ้าเป็น 'ลา' → บันทึกประวัติอย่างเดียว ไม่แตะคะแนน
+  if(val.typeName==='ลา'){
+    db.ref('history').push().set({
+      studentId: val.sid,
+      name:      stu.name,
+      class:     stu.class,
+      delta:     0,
+      type:      'ลา',
+      scoreType: 'leave',
+      reason:    val.reason,
+      note:      val.note||'',
+      by:        APP.displayName,
+      ts:        now,
+      scoreAfter: Number(stu.score)||100
+    }).then(function(){
+      toast('success','บันทึกสำเร็จ','บันทึกการลาแล้ว (ไม่หักคะแนน)');
+      var active = document.querySelector('.nav-btn.active');
+      if(active) active.click();
+    }).catch(function(e){ toast('error','เกิดข้อผิดพลาด',e.message); });
+    return;
+  }
 
   // คำนวณคะแนนจาก history จริง แล้วค่อย +delta
   // วิธีนี้ป้องกันคะแนนค้างผิดจากการ sync ผิดพลาดในอดีต
@@ -1505,7 +1533,9 @@ function exportStudentPDF(sid){
           ? '<span class="badge-vol">⭐ จิตอาสา</span>'
           : hh.type==='ปรับพฤติกรรม'
             ? '<span class="badge-imp">🔄 ปรับพฤติกรรม</span>'
-            : '<span class="badge-cut">✂️ ตัดคะแนน</span>';
+            : hh.type==='ลา'
+              ? '<span style="background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:10px;font-size:11px">📅 ลา</span>'
+              : '<span class="badge-cut">✂️ ตัดคะแนน</span>';
         h += '<tr><td style="white-space:nowrap;font-size:11px">'+hh.ts+'</td>';
         h += '<td>'+typeBadge+'</td>';
         h += '<td><span class="'+(plus?'plus':'minus')+'">'+(plus?'+':'')+hh.delta+'</span></td>';
